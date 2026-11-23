@@ -1,0 +1,42 @@
+{
+  "name": "obsidian-classificator",
+  "version": "0.2.0",
+  "private": true,
+  "description": "Classify Obsidian notes and show their classification in the file explorer and note header.",
+  "license": "MIT",
+  "repository": "github:nblum/obsidian-classificator",
+  "main": "main.js",
+  "engines": {
+    "node": "^24.0.0"
+  },
+  "scripts": {
+    "build": "npm run validate:manifest && npm run typecheck && node esbuild.config.mjs",
+    "dev": "node esbuild.config.mjs --watch",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
+    "test": "tsx --test tests/*.test.mjs",
+    "test:e2e": "npm run build && node scripts/run-obsidian-tests.mjs",
+    "screenshots": "npm run build && node scripts/run-obsidian-tests.mjs --screenshots && node scripts/documentation-screenshots.mjs",
+    "screenshots:update": "npm run screenshots && node scripts/documentation-screenshots.mjs --update",
+    "validate:manifest": "node scripts/release-metadata.mjs check",
+    "release:prepare": "node scripts/release-metadata.mjs prepare"
+  },
+  "devDependencies": {
+    "@eslint/js": "10.0.1",
+    "@types/mocha": "10.0.10",
+    "@types/node": "24.19.2",
+    "@wdio/cli": "10.2.0",
+    "@wdio/globals": "10.2.0",
+    "@wdio/local-runner": "10.2.0",
+    "@wdio/mocha-framework": "10.2.0",
+    "@wdio/spec-reporter": "10.2.0",
+    "esbuild": "0.28.2",
+    "eslint": "10.15.0",
+    "globals": "17.11.0",
+    "obsidian": "1.14.4",
+    "tsx": "4.23.15",
+    "typescript": "5.9.3",
+    "typescript-eslint": "8.73.0",
+    "wdio-obsidian-service": "3.5.0"
+  }
+}
