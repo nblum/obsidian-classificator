@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Changed
+
+- Refresh the Classificator teaser with a 4:3 SVG and PNG exports.
+
 ## [0.2.0]
 
 ### Added
