@@ -89,7 +89,8 @@ describe("Classificator documentation screenshots (opt-in)", () => {
     const mainWindow = await openSettings();
     try {
       await setViewport();
-      await $('select[aria-label="File explorer appearance"]:not([aria-hidden="true"])').selectByAttribute("value", "dot");
+      await $('.classificator-classification-setting[data-classification="public"] select[aria-label="File explorer"]:not([aria-hidden="true"])')
+        .selectByAttribute("value", "dot");
       await expect($(".classificator-message--success")).toHaveText("Settings saved.");
       await capture("settings.png", await settingsRegion());
     } finally {

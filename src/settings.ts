@@ -1,4 +1,4 @@
-import { Notice, PluginSettingTab, requireApiVersion, Setting } from "obsidian";
+import { DropdownComponent, Notice, PluginSettingTab, requireApiVersion, Setting } from "obsidian";
 import type { SettingDefinitionRender } from "obsidian";
 import { renderAbout } from "./help";
 import { isLanguagePreference, languageNames } from "./i18n";
@@ -18,11 +18,12 @@ type SettingsRow = Omit<SettingDefinitionRender, "render"> & {
 
 export type Color = typeof COLORS[number];
 export type CreationMode = "automatic" | "ask" | "off";
-export type ExplorerBadgeStyle = "label" | "dot";
+type ExplorerBadgeStyle = "label" | "dot" | "hidden";
 
 export interface Classification {
   value: string;
   color: Color;
+  badgeStyles?: { explorer?: ExplorerBadgeStyle };
 }
 
 export interface ClassificatorSettings {
@@ -31,9 +32,9 @@ export interface ClassificatorSettings {
   classifications: Classification[];
   creationMode: CreationMode;
   defaultClassification: string;
+  // Keep the old explorer settings as defaults for classifications without an explicit style.
   showExplorerBadge: boolean;
-  explorerBadgeStyle: ExplorerBadgeStyle;
-  showNoteBadge: boolean;
+  explorerBadgeStyle: Exclude<ExplorerBadgeStyle, "hidden">;
 }
 
 export const UNCLASSIFIED = "unclassified";
@@ -51,8 +52,16 @@ export const DEFAULT_SETTINGS: ClassificatorSettings = {
   defaultClassification: UNCLASSIFIED,
   showExplorerBadge: true,
   explorerBadgeStyle: "label",
-  showNoteBadge: true,
 };
+
+export function getExplorerBadgeStyle(
+  settings: ClassificatorSettings, classification?: Classification,
+): ExplorerBadgeStyle {
+  const style = classification?.badgeStyles?.explorer;
+  if (style === "label" || style === "dot" || style === "hidden") return style;
+  if (!settings.showExplorerBadge) return "hidden";
+  return settings.explorerBadgeStyle === "dot" ? "dot" : "label";
+}
 
 export class ClassificatorSettingTab extends PluginSettingTab {
   private statusEl?: HTMLElement;
@@ -171,60 +180,16 @@ export class ClassificatorSettingTab extends PluginSettingTab {
       });
     }
 
-    rows.push(
-      {
-        name: t("settings.explorerBadge"),
-        aliases: [t("settings.explorerAppearance")],
-        render: (setting) => {
-          setting.addDropdown((input) => {
-            input.selectEl.setAttribute("aria-label", t("settings.explorerAppearance"));
-            input
-              .addOption("label", t("settings.textBadge"))
-              .addOption("dot", t("settings.colorDot"))
-              .setValue(settings.explorerBadgeStyle)
-              .onChange((value) => this.save({ explorerBadgeStyle: value as ExplorerBadgeStyle }));
-          }).addToggle((input) => input
-            .setValue(settings.showExplorerBadge)
-            .onChange((showExplorerBadge) => this.save({ showExplorerBadge })));
-        },
-      },
-      {
-        name: t("settings.noteBadge"),
-        desc: t("settings.noteBadgeDescription"),
-        render: (setting) => {
-          setting.addToggle((input) => input
-            .setValue(settings.showNoteBadge)
-            .onChange((showNoteBadge) => this.save({ showNoteBadge })));
-        },
-      },
-      {
-        name: t("settings.classifications"),
-        render: (setting) => { setting.setHeading(); },
-      },
-    );
+    rows.push({
+      name: t("settings.classifications"),
+      render: (setting) => { setting.setHeading(); },
+    });
 
     for (const entry of settings.classifications) {
       rows.push({
         name: entry.value,
         render: (setting) => {
-          setting.addDropdown((input) => {
-            for (const color of COLORS) input.addOption(color, t(`colors.${color}`));
-            input.setValue(entry.color).onChange((value) => {
-              const classifications = this.plugin.settings.classifications.map((current) =>
-                current.value === entry.value ? { ...current, color: value as Color } : current,
-              );
-              this.save({ classifications });
-            });
-          }).addExtraButton((button) => button
-            .setIcon("trash")
-            .setTooltip(t("settings.removeClassification"))
-            .onClick(() => {
-              const current = this.plugin.settings;
-              this.save({
-                classifications: current.classifications.filter((item) => item.value !== entry.value),
-                defaultClassification: current.defaultClassification === entry.value ? "" : current.defaultClassification,
-              }, true);
-            }));
+          this.renderClassification(setting, entry);
         },
       });
     }
@@ -234,6 +199,51 @@ export class ClassificatorSettingTab extends PluginSettingTab {
       render: (setting) => this.renderAddClassification(setting),
     });
     return rows;
+  }
+
+  private renderClassification(setting: Setting, entry: Classification): void {
+    const { settings, translate: t } = this.plugin;
+    setting.setClass("classificator-classification-setting");
+    setting.settingEl.dataset.classification = entry.value;
+
+    const colorLabel = setting.controlEl.createEl("label", { text: t("settings.classificationColor") });
+    const colorInput = new DropdownComponent(colorLabel);
+    colorInput.selectEl.setAttribute("aria-label", t("settings.classificationColor"));
+    for (const color of COLORS) colorInput.addOption(color, t(`colors.${color}`));
+    colorInput.setValue(entry.color).onChange((color) => {
+      this.updateClassification(entry.value, (current) => ({ ...current, color: color as Color }));
+    });
+
+    const explorerLabel = setting.controlEl.createEl("label", { text: t("settings.explorerAppearance") });
+    const explorerInput = new DropdownComponent(explorerLabel);
+    explorerInput.selectEl.setAttribute("aria-label", t("settings.explorerAppearance"));
+    explorerInput
+      .addOption("label", t("settings.textBadge"))
+      .addOption("dot", t("settings.colorDot"))
+      .addOption("hidden", t("settings.hidden"))
+      .setValue(getExplorerBadgeStyle(settings, entry))
+      .onChange((style) => this.updateClassification(entry.value, (current) => ({
+        ...current,
+        badgeStyles: { explorer: style as ExplorerBadgeStyle },
+      })));
+
+    setting.addExtraButton((button) => button
+      .setIcon("trash")
+      .setTooltip(t("settings.removeClassification"))
+      .onClick(() => {
+        const current = this.plugin.settings;
+        this.save({
+          classifications: current.classifications.filter((item) => item.value !== entry.value),
+          defaultClassification: current.defaultClassification === entry.value ? "" : current.defaultClassification,
+        }, true);
+      }));
+  }
+
+  private updateClassification(value: string, update: (entry: Classification) => Classification): void {
+    const classifications = this.plugin.settings.classifications.map((entry) =>
+      entry.value === value ? update(entry) : entry,
+    );
+    this.save({ classifications });
   }
 
   private renderAddClassification(setting: Setting): void {

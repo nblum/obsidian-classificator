@@ -27,8 +27,17 @@
   list-style: none;
 }
 
-.classificator-help-actions .setting-item-control {
+.classificator-help-actions .setting-item-control,
+.classificator-classification-setting .setting-item-control {
   flex-wrap: wrap;
+}
+
+.classificator-classification-setting label {
+  display: flex;
+  flex-direction: column;
+  gap: var(--size-4-1);
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller);
 }
 
 .classificator-dialog-actions {
@@ -93,19 +102,7 @@
   max-width: min(42%, 9rem);
   margin-inline-start: 6px;
   text-overflow: ellipsis;
-  pointer-events: none;
-}
-
-.classificator-badge--explorer.classificator-badge--dot {
-  flex: 0 0 8px;
-  width: 8px;
-  height: 8px;
-  max-width: none;
-  padding: 0;
-  border: 0;
-  border-radius: 50%;
-  background-color: var(--classificator-color);
-  pointer-events: auto;
+  cursor: pointer;
 }
 
 .view-action.classificator-badge--header {
@@ -120,7 +117,26 @@
   cursor: pointer;
 }
 
+.classificator-badge--explorer:hover,
+.classificator-badge--explorer:focus-visible,
 .view-action.classificator-badge--header:hover,
 .view-action.classificator-badge--header:focus-visible {
   background-color: color-mix(in srgb, var(--classificator-color) 26%, var(--background-primary));
+}
+
+.classificator-badge--explorer.classificator-badge--dot {
+  box-sizing: border-box;
+  flex: 0 0 8px;
+  width: 8px;
+  height: 8px;
+  max-width: none;
+  padding: 0;
+  border: 1px solid var(--classificator-color);
+  border-radius: 50%;
+  background-color: transparent;
+}
+
+.classificator-badge--explorer.classificator-badge--dot:focus-visible {
+  outline: 1px solid var(--classificator-color);
+  outline-offset: 2px;
 }

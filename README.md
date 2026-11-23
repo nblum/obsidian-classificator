@@ -32,7 +32,7 @@ Under **Settings → Classificator → New notes**, choose what happens when you
 
 The new-note modes apply to empty Markdown files and skip `_meta.md`. If you create a note with content or from a template, you can classify it manually afterward.
 
-Use the note header badge, **Classify note** in the file context menu, or **Classify active note** in the command palette. Obsidian saves the chosen value at the top of the file.
+Click a badge in the note header or file explorer, then click a classification to apply it immediately. You can also use **Classify note** in the file context menu or **Classify active note** in the command palette. Obsidian saves the chosen value at the top of the file.
 
 ```yaml
 ---
@@ -62,9 +62,9 @@ Choose **Global** in the folder dialog to remove `classification` from `_meta.md
 
 ## Appearance and classifications
 
-In Classificator settings, you can toggle the file explorer and note header badges independently. For the file explorer, choose **Text badge** or **Color dot**. The color dot’s tooltip shows the classification.
+Under **Settings → Classificator → Classifications**, choose **Text badge**, **Color dot**, or **Hidden** for each classification in the file explorer. Hover over a dot to see the classification. The note header always shows a text badge.
 
-Under **Classifications**, you can add custom values, change colors, and remove values from the picker. Notes retain any values they already contain.
+Existing classifications start with the previous global file explorer settings. You can also add custom values, change colors, and remove values from the picker. Notes retain any values they already contain.
 
 ## Development and testing
 

@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+### Changed
+
+- Change a note’s classification in two clicks from its header or file explorer badge.
+- Choose a text badge, outlined color dot, or hidden appearance for each classification in the file explorer. The note header always shows a text badge.
+
 ## [0.3.0] - 2026-11-23
 
 ### Added

@@ -1,4 +1,4 @@
-import { getLanguage, moment, Notice, Plugin, requireApiVersion, TFile, TFolder, Vault } from "obsidian";
+import { getLanguage, Menu, moment, Notice, Plugin, requireApiVersion, TFile, TFolder, Vault } from "obsidian";
 import type { Command, Modal, TAbstractFile } from "obsidian";
 import { ClassificationBadges } from "./badges";
 import { CLASSIFICATION_FIELD, FOLDER_META_FILENAME, readFolderClassification, writeFolderClassification } from "./folder-settings";
@@ -27,6 +27,7 @@ export default class Classificator extends Plugin {
   translate = createTranslator("en");
   private readonly localizedCommands: Array<{ command: Command; key: TranslationKey }> = [];
   private badges?: ClassificationBadges;
+  private classificationMenu?: Menu;
   private modal?: Modal;
   private prompts = Promise.resolve();
   private settingsWrite = Promise.resolve();
@@ -101,6 +102,7 @@ export default class Classificator extends Plugin {
 
   override onunload(): void {
     this.stopped = true;
+    this.classificationMenu?.hide();
     this.modal?.close();
     this.badges?.dispose();
   }
@@ -155,6 +157,33 @@ export default class Classificator extends Plugin {
   getClassification(file: TFile): string | undefined {
     const value: unknown = this.app.metadataCache.getFileCache(file)?.frontmatter?.[CLASSIFICATION_FIELD];
     return typeof value === "string" && value.trim() ? value : undefined;
+  }
+
+  showClassificationMenu(file: TFile, badge: HTMLElement): void {
+    if (this.stopped || !this.isNote(file) || !this.canWrite(file)) return;
+    const { classifications } = this.settings;
+    if (!classifications.length) {
+      new Notice(this.translate("errors.noClassifications"));
+      return;
+    }
+
+    this.classificationMenu?.hide();
+    const current = this.getClassification(file);
+    const menu = new Menu();
+    for (const { value } of classifications) {
+      menu.addItem((item) => item
+        .setTitle(value)
+        .setChecked(value === current)
+        .onClick(() => { void this.writeClassification(file, value, "always"); }));
+    }
+    menu.onHide(() => {
+      badge.setAttribute("aria-expanded", "false");
+      this.classificationMenu = undefined;
+    });
+    this.classificationMenu = menu;
+    badge.setAttribute("aria-expanded", "true");
+    const { left, bottom } = badge.getBoundingClientRect();
+    menu.showAtPosition({ x: left, y: bottom }, badge.ownerDocument);
   }
 
   selectForFile(file: TFile, onlyIfMissing = false): Promise<void> {

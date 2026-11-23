@@ -17,6 +17,10 @@ const applyToAll = `${folderModal} input[type="checkbox"]#classificator-folder-a
 const applyToUnclassified = `${folderModal} input[type="checkbox"]#classificator-folder-apply-unclassified`;
 const headerBadge = ".workspace-leaf.mod-active .classificator-badge--header";
 
+function explorerStyle(value: string) {
+  return $(`.classificator-classification-setting[data-classification="${value}"] select[aria-label="Dateibaum"]:not([aria-hidden="true"])`);
+}
+
 function explorerRow(path: string): string {
   return `.nav-file-title[data-path="${path}"]`;
 }
@@ -47,7 +51,7 @@ async function openFolderSettings(path: string): Promise<void> {
   await expect($(folderModal)).toBeDisplayed();
 }
 
-async function loadSettings(settings: Partial<ClassificatorSettings>): Promise<void> {
+async function loadSettings(settings: Partial<ClassificatorSettings> & { showNoteBadge?: boolean }): Promise<void> {
   await obsidianPage.disablePlugin(pluginId);
   await writeFile(settingsPath(), JSON.stringify({ language: "de", introductionSeen: true, ...settings }));
   await obsidianPage.enablePlugin(pluginId);
@@ -127,10 +131,32 @@ describe("Classificator in Obsidian", () => {
     expect(await obsidianPage.read(path)).toBe("");
 
     await $(headerBadge).click();
-    await saveClassification("internal");
+    await expect($(modal)).not.toExist();
+    await $(".menu-item-title=internal").click();
     await expect($(headerBadge)).toHaveText("internal");
     await expect($(explorerBadge(path))).toHaveText("internal");
     expect(await obsidianPage.read(path)).toMatch(/^---\r?\nclassification: internal\r?\n---/);
+  });
+
+  it("reclassifies a note from its explorer badge without opening the note", async () => {
+    const otherNote = "Open note.md";
+    await createFile(otherNote, "Open note content.\n");
+    await obsidianPage.openFile(otherNote);
+
+    await $(explorerBadge(existing)).click();
+    await expect($(modal)).not.toExist();
+    await $(".menu-item-title=confidential").click();
+
+    await expect($(explorerBadge(existing))).toHaveText("confidential");
+    const openPath = await browser.executeObsidian(({ app, obsidian }) => {
+      const view = app.workspace.getMostRecentLeaf(app.workspace.rootSplit)?.view;
+      return view instanceof obsidian.MarkdownView ? view.file?.path : undefined;
+    });
+    expect(openPath).toBe(otherNote);
+    const text = await obsidianPage.read(existing);
+    expect(text).toMatch(/^classification: confidential$/m);
+    expect(text).toMatch(/^topic: handbook$/m);
+    expect(text).toContain("Original note content.");
   });
 
   it("reclassifies a note through the command and preserves unrelated frontmatter and content", async () => {
@@ -205,26 +231,99 @@ describe("Classificator in Obsidian", () => {
     expect(await obsidianPage.read(otherNote)).toBe("Unselected note content.\n");
   });
 
-  it("displays a labeled color dot with the header badge disabled", async () => {
-    await loadSettings({ explorerBadgeStyle: "dot", showNoteBadge: false });
+  it("keeps the header badge as text despite saved header appearance settings", async () => {
+    const badgeStyles = { explorer: "dot", header: "dot" } as const;
+    await loadSettings({
+      explorerBadgeStyle: "dot",
+      showNoteBadge: false,
+      classifications: [
+        { value: "public", color: "green", badgeStyles },
+        { value: "internal", color: "blue" },
+      ],
+    });
     await obsidianPage.openFile(existing);
 
     const badge = $(`${explorerBadge(existing)}.classificator-badge--dot`);
+    const header = $(".workspace-split.mod-root .classificator-badge--header");
     await expect(badge).toBeDisplayed();
-    await expect(badge).toHaveAttribute("aria-label", "public");
-    await expect(badge).toHaveAttribute("title", "public");
+    await expect(badge).toHaveAttribute("aria-label", "Einstufung ändern: public");
     await expect(badge).toHaveAttribute("data-color", "green");
-    await expect($(headerBadge)).not.toExist();
+    await badge.moveTo();
+    expect((await badge.getCSSProperty("background-color")).value).toBe("rgba(0,0,0,0)");
+    expect((await badge.getCSSProperty("border-top-width")).value).toBe("1px");
+    await expect(header).toHaveText("public");
+    await badge.click();
+    await $(".menu-item-title=internal").click();
+    await expect(badge).toHaveAttribute("aria-label", "Einstufung ändern: internal");
+    await expect(header).toHaveText("internal");
   });
 
-  it("keeps the header badge with the explorer badge disabled and removes it on unload", async () => {
+  it("saves per-classification explorer styles and keeps the header badge visible", async () => {
+    await loadSettings({ explorerBadgeStyle: "dot" });
+    const internal = "Internal note.md";
+    const confidential = "Confidential note.md";
+    const contents = "---\nclassification: confidential\n---\n\nConfidential note content.\n";
+    await createFile(internal, "---\nclassification: internal\n---\n");
+    await createFile(confidential, contents);
+    await obsidianPage.openFile(confidential);
+    await expect($(`${explorerBadge(confidential)}.classificator-badge--dot`)).toBeDisplayed();
+    await expect($(headerBadge)).toHaveText("confidential");
+
+    const mainWindow = await openSettings();
+    try {
+      await expect(explorerStyle("public")).toHaveValue("dot");
+      await expect($('.classificator-classification-setting select[aria-label="Notizkopf"]')).not.toExist();
+      await explorerStyle("internal").selectByAttribute("value", "label");
+      await explorerStyle("confidential").selectByAttribute("value", "hidden");
+      await expect($(".classificator-message--success")).toHaveText("Einstellungen gespeichert.");
+    } finally {
+      await closeSettings(mainWindow);
+    }
+
+    await expect($(explorerBadge(confidential))).not.toExist();
+    await expect($(headerBadge)).toHaveText("confidential");
+    expect(await obsidianPage.read(confidential)).toBe(contents);
+    await expect($(`${explorerBadge(existing)}.classificator-badge--dot`)).toBeDisplayed();
+    await expect($(explorerBadge(internal))).toHaveText("internal");
+
+    await obsidianPage.disablePlugin(pluginId);
+    await obsidianPage.enablePlugin(pluginId);
+    await obsidianPage.openFile(existing);
+    await expect($(headerBadge)).toHaveText("public");
+    await expect($(explorerBadge(confidential))).not.toExist();
+
+    await obsidianPage.openFile(internal);
+    const badge = $(headerBadge);
+    await expect(badge).toHaveText("internal");
+    await badge.click();
+    await $(".menu-item-title=confidential").click();
+    await expect(badge).toHaveText("confidential");
+    await expect($(explorerBadge(internal))).not.toExist();
+    expect(await obsidianPage.read(internal)).toMatch(/^classification: confidential$/m);
+
+    await browser.executeObsidianCommand(`${pluginId}:classify-note`);
+    await saveClassification("public");
+    await expect($(headerBadge)).toHaveText("public");
+    await expect($(`${explorerBadge(internal)}.classificator-badge--dot`)).toBeDisplayed();
+  });
+
+  it("opens the header menu by keyboard and removes it on unload", async () => {
     await loadSettings({ showExplorerBadge: false });
     await obsidianPage.openFile(existing);
 
     await expect($(headerBadge)).toHaveText("public");
     await expect($(explorerBadge(existing))).not.toExist();
+    await browser.execute((selector) => document.querySelector<HTMLElement>(selector)?.focus(), headerBadge);
+    await browser.keys(Key.Enter);
+    await expect($(".menu-item-title=public")).toBeDisplayed();
+    await browser.keys(Key.Escape);
+    await expect($(".menu-item-title=public")).not.toExist();
+
+    await $(headerBadge).click();
+    await expect($(".menu-item-title=public")).toBeDisplayed();
     await obsidianPage.disablePlugin(pluginId);
     await expect($(headerBadge)).not.toExist();
+    await expect($(".menu-item-title=public")).not.toExist();
   });
 
   it("applies a freshly written folder classification and uses the global default in a subfolder", async () => {
@@ -425,11 +524,11 @@ describe("Classificator in Obsidian", () => {
 
     const mainWindow = await openSettings();
     try {
-      await $(".setting-search-container input").setValue("Badge im Notizkopf");
-      const result = $(".setting-search-results").$(".vertical-tab-nav-item-title=Badge im Notizkopf");
+      await $(".setting-search-container input").setValue("public");
+      const result = $(".setting-search-results").$(".vertical-tab-nav-item-title=public");
       await expect(result).toBeDisplayed();
       await result.click();
-      await expect($(".setting-item-name=Badge im Notizkopf")).toBeDisplayed();
+      await expect(explorerStyle("public")).toBeDisplayed();
     } finally {
       await closeSettings(mainWindow);
     }
