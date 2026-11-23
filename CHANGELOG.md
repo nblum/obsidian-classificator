@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-11-23
+
 ### Changed
 
 - Change a note’s classification in two clicks from its header or file explorer badge.
