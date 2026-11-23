@@ -1,4 +1,5 @@
-import { Notice, PluginSettingTab, Setting } from "obsidian";
+import { Notice, PluginSettingTab, requireApiVersion, Setting } from "obsidian";
+import type { SettingDefinitionRender } from "obsidian";
 import { renderAbout } from "./help";
 import { isLanguagePreference, languageNames } from "./i18n";
 import type { LanguagePreference } from "./i18n";
@@ -10,6 +11,10 @@ const saveMessages = {
   saved: { tone: "success", key: "status.saved" },
   failed: { tone: "error", key: "errors.settingsSave" },
 } as const;
+
+type SettingsRow = Omit<SettingDefinitionRender, "render"> & {
+  render: (setting: Setting) => void | (() => void);
+};
 
 export type Color = typeof COLORS[number];
 export type CreationMode = "automatic" | "ask" | "off";
@@ -31,17 +36,19 @@ export interface ClassificatorSettings {
   showNoteBadge: boolean;
 }
 
+export const UNCLASSIFIED = "unclassified";
+
 export const DEFAULT_SETTINGS: ClassificatorSettings = {
   language: "auto",
   introductionSeen: false,
   classifications: [
-    { value: "unclassified", color: "gray" },
+    { value: UNCLASSIFIED, color: "gray" },
     { value: "public", color: "green" },
     { value: "internal", color: "blue" },
     { value: "confidential", color: "red" },
   ],
   creationMode: "automatic",
-  defaultClassification: "unclassified",
+  defaultClassification: UNCLASSIFIED,
   showExplorerBadge: true,
   explorerBadgeStyle: "label",
   showNoteBadge: true,
@@ -56,127 +63,181 @@ export class ClassificatorSettingTab extends PluginSettingTab {
     super(plugin.app, plugin);
   }
 
+  override getSettingDefinitions(): SettingsRow[] {
+    return this.createSettingsRows();
+  }
+
+  // Obsidian versions before 1.13 call display() to build the settings tab.
   override display(): void {
-    const { containerEl } = this;
-    const { settings, translate: t } = this.plugin;
-    containerEl.empty();
+    this.renderLegacySettings();
+  }
 
-    const header = containerEl.createEl("header", { cls: "classificator-settings-header" });
-    header.createEl("h2", { text: this.plugin.manifest.name });
-    renderAbout(header, t, this.plugin.manifest);
+  private renderLegacySettings(): void {
+    this.containerEl.empty();
+    for (const { name, desc, render } of this.createSettingsRows()) {
+      const setting = new Setting(this.containerEl).setName(name);
+      if (desc) setting.setDesc(desc);
+      render(setting);
+    }
+  }
 
-    new Setting(containerEl)
-      .setName(t("language.label"))
-      .setDesc(t("language.description"))
-      .addDropdown((input) => {
-        input.selectEl.setAttribute("aria-label", t("language.label"));
-        input
-          .addOption("auto", t("language.auto"))
-          .addOptions(languageNames)
-          .setValue(settings.language)
-          .onChange((value) => {
-            if (!isLanguagePreference(value)) return;
-            this.save({ language: value }, true);
+  private createSettingsRows(): SettingsRow[] {
+    const { settings, translate: t, manifest } = this.plugin;
+    const rows: SettingsRow[] = [
+      {
+        name: manifest.name,
+        searchable: false,
+        render: (setting) => {
+          setting.setClass("classificator-settings-header").setHeading();
+          const about = setting.infoEl.createDiv();
+          renderAbout(about, t, manifest);
+          return () => about.remove();
+        },
+      },
+      {
+        name: t("language.label"),
+        desc: t("language.description"),
+        render: (setting) => {
+          setting.addDropdown((input) => {
+            input.selectEl.setAttribute("aria-label", t("language.label"));
+            input
+              .addOption("auto", t("language.auto"))
+              .addOptions(languageNames)
+              .setValue(settings.language)
+              .onChange((value) => {
+                if (isLanguagePreference(value)) this.save({ language: value }, true);
+              });
           });
-      });
-
-    new Setting(containerEl).setClass("classificator-help-actions")
-      .addButton((button) => button.setButtonText(t("commands.showIntroduction"))
-        .onClick(() => this.plugin.showIntroduction()))
-      .addButton((button) => button.setButtonText(t("commands.showAbout"))
-        .onClick(() => this.plugin.showAbout()));
-
-    this.statusEl = containerEl.createDiv({
-      cls: "classificator-settings-status",
-      attr: { role: "status", "aria-atomic": "true" },
-    });
-    this.renderSaveStatus();
-
-    new Setting(containerEl)
-      .setName(t("settings.newNotes"))
-      .setDesc(t("settings.newNotesDescription"))
-      .addDropdown((input) => {
-        input
-          .addOption("automatic", t("settings.automatic"))
-          .addOption("ask", t("settings.ask"))
-          .addOption("off", t("settings.manual"))
-          .setValue(settings.creationMode)
-          .onChange((value) => {
-            this.save({ creationMode: value as CreationMode }, true);
+        },
+      },
+      {
+        name: "",
+        searchable: false,
+        render: (setting) => {
+          setting.setClass("classificator-help-actions")
+            .addButton((button) => button.setButtonText(t("commands.showIntroduction"))
+              .onClick(() => this.plugin.showIntroduction()))
+            .addButton((button) => button.setButtonText(t("commands.showAbout"))
+              .onClick(() => this.plugin.showAbout()));
+        },
+      },
+      {
+        name: "",
+        searchable: false,
+        render: (setting) => {
+          setting.setClass("classificator-settings-status-row");
+          const statusEl = setting.infoEl.createDiv({
+            cls: "classificator-settings-status",
+            attr: { role: "status", "aria-atomic": "true" },
           });
-      });
+          this.statusEl = statusEl;
+          this.renderSaveStatus();
+          return () => {
+            statusEl.remove();
+            if (this.statusEl === statusEl) this.statusEl = undefined;
+          };
+        },
+      },
+      {
+        name: t("settings.newNotes"),
+        desc: t("settings.newNotesDescription"),
+        render: (setting) => {
+          setting.addDropdown((input) => input
+            .addOption("automatic", t("settings.automatic"))
+            .addOption("ask", t("settings.ask"))
+            .addOption("off", t("settings.manual"))
+            .setValue(settings.creationMode)
+            .onChange((value) => {
+              this.save({ creationMode: value as CreationMode }, true);
+            }));
+        },
+      },
+    ];
 
     if (settings.creationMode === "automatic") {
-      new Setting(containerEl)
-        .setName(t("settings.defaultValue"))
-        .addDropdown((input) => {
-          input.addOption("", t("settings.noDefault"));
-          for (const entry of settings.classifications) {
-            input.addOption(entry.value, entry.value);
-          }
-          input
-            .setValue(settings.defaultClassification)
-            .onChange((defaultClassification) => {
-              this.save({ defaultClassification });
-            });
-        });
+      rows.push({
+        name: t("settings.defaultValue"),
+        render: (setting) => {
+          setting.addDropdown((input) => {
+            input.addOption("", t("settings.noDefault"));
+            for (const entry of settings.classifications) {
+              input.addOption(entry.value, entry.value);
+            }
+            input
+              .setValue(settings.defaultClassification)
+              .onChange((defaultClassification) => this.save({ defaultClassification }));
+          });
+        },
+      });
     }
 
-    new Setting(containerEl)
-      .setName(t("settings.explorerBadge"))
-      .addDropdown((input) => {
-        input.selectEl.setAttribute("aria-label", t("settings.explorerAppearance"));
-        input
-          .addOption("label", t("settings.textBadge"))
-          .addOption("dot", t("settings.colorDot"))
-          .setValue(settings.explorerBadgeStyle)
-          .onChange((value) => {
-            this.save({ explorerBadgeStyle: value as ExplorerBadgeStyle });
-          });
-      })
-      .addToggle((input) => input
-        .setValue(settings.showExplorerBadge)
-        .onChange((showExplorerBadge) => {
-          this.save({ showExplorerBadge });
-        }));
-
-    new Setting(containerEl)
-      .setName(t("settings.noteBadge"))
-      .setDesc(t("settings.noteBadgeDescription"))
-      .addToggle((input) => input
-        .setValue(settings.showNoteBadge)
-        .onChange((showNoteBadge) => {
-          this.save({ showNoteBadge });
-        }));
-
-    new Setting(containerEl).setName(t("settings.classifications")).setHeading();
+    rows.push(
+      {
+        name: t("settings.explorerBadge"),
+        aliases: [t("settings.explorerAppearance")],
+        render: (setting) => {
+          setting.addDropdown((input) => {
+            input.selectEl.setAttribute("aria-label", t("settings.explorerAppearance"));
+            input
+              .addOption("label", t("settings.textBadge"))
+              .addOption("dot", t("settings.colorDot"))
+              .setValue(settings.explorerBadgeStyle)
+              .onChange((value) => this.save({ explorerBadgeStyle: value as ExplorerBadgeStyle }));
+          }).addToggle((input) => input
+            .setValue(settings.showExplorerBadge)
+            .onChange((showExplorerBadge) => this.save({ showExplorerBadge })));
+        },
+      },
+      {
+        name: t("settings.noteBadge"),
+        desc: t("settings.noteBadgeDescription"),
+        render: (setting) => {
+          setting.addToggle((input) => input
+            .setValue(settings.showNoteBadge)
+            .onChange((showNoteBadge) => this.save({ showNoteBadge })));
+        },
+      },
+      {
+        name: t("settings.classifications"),
+        render: (setting) => { setting.setHeading(); },
+      },
+    );
 
     for (const entry of settings.classifications) {
-      new Setting(containerEl)
-        .setName(entry.value)
-        .addDropdown((input) => {
-          for (const color of COLORS) input.addOption(color, t(`colors.${color}`));
-          input.setValue(entry.color).onChange((value) => {
-            const classifications = this.plugin.settings.classifications.map((current) =>
-              current.value === entry.value ? { ...current, color: value as Color } : current,
-            );
-            this.save({ classifications });
-          });
-        })
-        .addExtraButton((button) => button
-          .setIcon("trash")
-          .setTooltip(t("settings.removeClassification"))
-          .onClick(() => {
-            const current = this.plugin.settings;
-            this.save({
-              classifications: current.classifications.filter((item) => item.value !== entry.value),
-              defaultClassification: current.defaultClassification === entry.value
-                ? ""
-                : current.defaultClassification,
-            }, true);
-          }));
+      rows.push({
+        name: entry.value,
+        render: (setting) => {
+          setting.addDropdown((input) => {
+            for (const color of COLORS) input.addOption(color, t(`colors.${color}`));
+            input.setValue(entry.color).onChange((value) => {
+              const classifications = this.plugin.settings.classifications.map((current) =>
+                current.value === entry.value ? { ...current, color: value as Color } : current,
+              );
+              this.save({ classifications });
+            });
+          }).addExtraButton((button) => button
+            .setIcon("trash")
+            .setTooltip(t("settings.removeClassification"))
+            .onClick(() => {
+              const current = this.plugin.settings;
+              this.save({
+                classifications: current.classifications.filter((item) => item.value !== entry.value),
+                defaultClassification: current.defaultClassification === entry.value ? "" : current.defaultClassification,
+              }, true);
+            }));
+        },
+      });
     }
 
+    rows.push({
+      name: t("settings.newClassification"),
+      render: (setting) => this.renderAddClassification(setting),
+    });
+    return rows;
+  }
+
+  private renderAddClassification(setting: Setting): void {
+    const { translate: t } = this.plugin;
     let candidate = "";
     const addClassification = () => {
       const value = candidate.trim();
@@ -192,8 +253,7 @@ export class ClassificatorSettingTab extends PluginSettingTab {
       this.save({ classifications: [...classifications, { value, color: "gray" }] }, true);
     };
 
-    new Setting(containerEl)
-      .setName(t("settings.newClassification"))
+    setting
       .addText((input) => {
         input.setPlaceholder(t("settings.classificationPlaceholder")).onChange((value) => { candidate = value; });
         input.inputEl.addEventListener("keydown", (event) => {
@@ -214,8 +274,12 @@ export class ClassificatorSettingTab extends PluginSettingTab {
     const revision = ++this.saveRevision;
     this.saveStatus = "saving";
     const write = this.plugin.updateSettings(update);
-    if (redraw) this.display();
-    else this.renderSaveStatus();
+    if (redraw) {
+      if (requireApiVersion("1.13.0")) this.update();
+      else this.renderLegacySettings();
+    } else {
+      this.renderSaveStatus();
+    }
 
     void write.then(() => this.finishSave(revision, "saved"), () => this.finishSave(revision, "failed"));
   }

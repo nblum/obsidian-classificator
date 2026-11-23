@@ -13,12 +13,14 @@ Use Node.js 24 (`nvm use`) and install the locked dependencies with `npm ci`.
 | Command | Purpose |
 | --- | --- |
 | `npm run dev` | Rebuild `main.js` on TypeScript changes with inline source maps. |
-| `npm run lint` | Check repository JavaScript and TypeScript with ESLint. |
+| `npm run lint` | Check repository JavaScript and TypeScript with ESLint and apply Obsidian's official rules to `src/`. |
 | `npm test` | Run the focused Node.js tests. |
 | `npm run build` | Validate release metadata, type-check, and generate the production bundle. |
 | `npm run test:e2e` | Build the plugin and exercise it in Obsidian with a temporary copy of the fixture vault. |
 
 Run lint, tests, and the build before submitting a change. Run the Obsidian suite when editing classification behavior or the UI. For a manual check, install the three plugin files from the [README](README.md#installation) into a test vault and reload Obsidian after rebuilding.
+
+The Obsidian rules check API usage against `minAppVersion` in `manifest.json`. Guard calls to newer APIs with `requireApiVersion()` when they have a compatible fallback. The same lint command runs in CI and before the tagged release build. [Obsidian ESLint configuration](https://github.com/obsidianmd/eslint-plugin/blob/master/docs/configuration.md#using-only-obsidianmd-rules-without-the-recommended-config)
 
 On Linux, install `xvfb`, `openbox` and `xauth` to run the suite on a private display. Set `E2E_HEADED=1` for a visible Linux debugging run. The local default is Obsidian Desktop 1.7.4, the minimum supported version. Set `OBSIDIAN_VERSION=latest` to check the current public build. CI runs both. WDIO logs and any failure screenshots go to `e2e-results/`.
 

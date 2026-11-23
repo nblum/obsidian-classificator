@@ -2,6 +2,7 @@ import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { $, browser, expect } from "@wdio/globals";
 import { obsidianPage } from "wdio-obsidian-service";
+import { Key } from "webdriverio";
 import manifest from "../../manifest.json" with { type: "json" };
 import type Classificator from "../../src/main";
 import type { ClassificatorSettings } from "../../src/settings";
@@ -12,6 +13,8 @@ const existing = "Existing.md";
 const modal = ".classificator-selection-modal";
 const folderModal = ".classificator-folder-settings-modal";
 const folderClassification = `${folderModal} select[aria-label="Standardeinstufung"]:not([aria-hidden="true"])`;
+const applyToAll = `${folderModal} input[type="checkbox"]#classificator-folder-apply-all`;
+const applyToUnclassified = `${folderModal} input[type="checkbox"]#classificator-folder-apply-unclassified`;
 const headerBadge = ".workspace-leaf.mod-active .classificator-badge--header";
 
 function explorerRow(path: string): string {
@@ -161,6 +164,47 @@ describe("Classificator in Obsidian", () => {
     expect(await obsidianPage.read(openNote)).toBe(original);
   });
 
+  it("applies one classification to selected notes across folders", async () => {
+    const secondNote = "Projects/Batch note.md";
+    const folderRules = "Projects/_meta.md";
+    const folderContents = "---\nclassification: public\n---\n";
+    const attachment = "Board.canvas";
+    const attachmentContents = '{"nodes":[],"edges":[]}';
+    const otherNote = "Unselected.md";
+    await createFolder("Projects");
+    await createFile(secondNote, "Second note content.\n");
+    await createFile(folderRules, folderContents);
+    await createFile(attachment, attachmentContents);
+    await createFile(otherNote, "Unselected note content.\n");
+    await $(folderRow("Projects")).click();
+
+    await $(explorerRow(folderRules)).click();
+    await browser.action("key").down(Key.Shift).perform(true);
+    try {
+      await browser.action("pointer").move({ origin: $(explorerRow(existing)) }).down().up().perform(true);
+    } finally {
+      await browser.releaseActions();
+    }
+    await $(explorerRow(existing)).click({ button: "right" });
+    await $(".menu-item-title=Ausgewählte Notizen einstufen").click();
+    await expect($(`${modal} p`)).toHaveText("Ausgewählte Notizen (2)");
+    await expect($(`${modal} button.mod-cta`)).toBeDisabled();
+    await saveClassification("confidential");
+
+    await expect($(explorerBadge(existing))).toHaveText("confidential");
+    await expect($(explorerBadge(secondNote))).toHaveText("confidential");
+    const existingContents = await obsidianPage.read(existing);
+    expect(existingContents).toMatch(/^classification: confidential$/m);
+    expect(existingContents).toMatch(/^topic: handbook$/m);
+    expect(existingContents).toContain("Original note content.");
+    const secondContents = await obsidianPage.read(secondNote);
+    expect(secondContents).toMatch(/^classification: confidential$/m);
+    expect(secondContents).toContain("Second note content.");
+    expect(await obsidianPage.read(folderRules)).toBe(folderContents);
+    expect(await obsidianPage.read(attachment)).toBe(attachmentContents);
+    expect(await obsidianPage.read(otherNote)).toBe("Unselected note content.\n");
+  });
+
   it("displays a labeled color dot with the header badge disabled", async () => {
     await loadSettings({ explorerBadgeStyle: "dot", showNoteBadge: false });
     await obsidianPage.openFile(existing);
@@ -197,13 +241,68 @@ describe("Classificator in Obsidian", () => {
 
   it("creates _meta.md with the classification selected in a folder's context menu", async () => {
     await createFolder("Projects");
+    const note = "Projects/Brief.md";
+    const contents = "Existing brief.\n";
+    await createFile(note, contents);
     await openFolderSettings("Projects");
     await $(folderClassification).selectByAttribute("value", "internal");
+    await $(applyToUnclassified).click();
+    await expect($(applyToUnclassified)).not.toBeSelected();
     await $(`${folderModal} button.mod-cta`).click();
 
     await openFolderSettings("Projects");
     expect(await $(folderClassification).getValue()).toBe("internal");
     expect(await obsidianPage.read("Projects/_meta.md")).toMatch(/^classification: internal$/m);
+    expect(await obsidianPage.read(note)).toBe(contents);
+  });
+
+  it("applies folder rules to only unclassified notes by default and to all notes on request", async () => {
+    await createFolder("Projects");
+    await createFolder("Projects/Archive");
+    const classified = "Projects/Classified.md";
+    const classifiedContents = "---\nclassification: 'legacy' # Keep this value\ntopic: handbook\n---\n\nOriginal classified note.\n";
+    const blank = "Projects/Blank.md";
+    const missing = "Projects/Archive/Missing.md";
+    const unclassified = "Projects/Archive/Unclassified.md";
+    const nestedRules = "Projects/Archive/_meta.md";
+    const ruleContents = "---\nclassification: public\n---\n";
+    const attachment = "Projects/Attachment.txt";
+    const outsideContents = await obsidianPage.read(existing);
+    await createFile(classified, classifiedContents);
+    await createFile(blank, "---\nclassification:\n---\n\nBlank classification.\n");
+    await createFile(missing, "Missing classification.\n");
+    await createFile(unclassified, "---\nclassification: unclassified\n---\n\nUnclassified note.\n");
+    await createFile(nestedRules, ruleContents);
+    await createFile(attachment, "Attachment contents.");
+
+    await openFolderSettings("Projects");
+    await expect($(applyToAll)).not.toBeSelected();
+    await expect($(applyToUnclassified)).toBeSelected();
+    await $(folderClassification).selectByAttribute("value", "internal");
+    await $(`${folderModal} button.mod-cta`).click();
+
+    for (const path of [blank, missing, unclassified]) {
+      await browser.waitUntil(async () => /^classification: internal$/m.test(await obsidianPage.read(path)));
+    }
+    expect(await obsidianPage.read(classified)).toBe(classifiedContents);
+    expect(await obsidianPage.read("Projects/_meta.md")).toMatch(/^classification: internal$/m);
+
+    await openFolderSettings("Projects");
+    await $(folderClassification).selectByAttribute("value", "confidential");
+    await $(applyToAll).click();
+    await expect($(applyToAll)).toBeSelected();
+    await expect($(applyToUnclassified)).toBeSelected();
+    await $(`${folderModal} button.mod-cta`).click();
+
+    for (const path of [classified, blank, missing, unclassified]) {
+      await browser.waitUntil(async () => /^classification: confidential$/m.test(await obsidianPage.read(path)));
+    }
+    const updated = await obsidianPage.read(classified);
+    expect(updated).toMatch(/^topic: handbook$/m);
+    expect(updated).toContain("Original classified note.");
+    expect(await obsidianPage.read(nestedRules)).toBe(ruleContents);
+    expect(await obsidianPage.read(attachment)).toBe("Attachment contents.");
+    expect(await obsidianPage.read(existing)).toBe(outsideContents);
   });
 
   it("removes the classification when reset to global and preserves the rest of _meta.md", async () => {
@@ -234,6 +333,7 @@ describe("Classificator in Obsidian", () => {
     try {
       await languageSelect("Sprache").selectByAttribute("value", "fr");
       await expect($(".setting-item-name=Nouvelles notes")).toBeDisplayed();
+      await expect($(".classificator-settings-header .classificator-about-meta")).toBeDisplayed();
       await expect($(".classificator-message--success")).toHaveText("Paramètres enregistrés.");
     } finally {
       await closeSettings(mainWindow);
@@ -296,7 +396,8 @@ describe("Classificator in Obsidian", () => {
     const mainWindow = await openSettings();
     try {
       const header = $(".classificator-settings-header");
-      await expect(header.$("h2")).toHaveText(manifest.name);
+      await expect(header).toHaveElementClass("setting-item-heading");
+      await expect(header.$(".setting-item-name")).toHaveText(manifest.name);
       await expect(header.$(".classificator-about-meta")).toHaveText(expect.stringContaining(manifest.version));
       await expect(header.$(".classificator-about-meta")).toHaveText(expect.stringContaining(manifest.author));
       await expect(header.$('a[href="https://github.com/nblum/obsidian-classificator#readme"]')).toHaveText("Dokumentation");
@@ -316,6 +417,22 @@ describe("Classificator in Obsidian", () => {
     await browser.executeObsidianCommand(`${pluginId}:show-about`);
     await expect(about.$(".modal-title")).toHaveText("Über Classificator");
     await about.$("button=Schließen").click();
+  });
+
+  it("finds Classificator options through Obsidian's settings search", async function () {
+    const supportsSettingsSearch = await browser.executeObsidian(({ obsidian }) => obsidian.requireApiVersion("1.13.0"));
+    if (!supportsSettingsSearch) this.skip();
+
+    const mainWindow = await openSettings();
+    try {
+      await $(".setting-search-container input").setValue("Badge im Notizkopf");
+      const result = $(".setting-search-results").$(".vertical-tab-nav-item-title=Badge im Notizkopf");
+      await expect(result).toBeDisplayed();
+      await result.click();
+      await expect($(".setting-item-name=Badge im Notizkopf")).toBeDisplayed();
+    } finally {
+      await closeSettings(mainWindow);
+    }
   });
 
   it("shows a failed settings save and recovers on the next change", async () => {

@@ -1,36 +1,38 @@
 # Classificator
 
-Classificator speichert die Einstufung einer Markdown-Notiz als Obsidian-Eigenschaft `classification`. Du kannst sie im Dateibaum und im Notizkopf anzeigen lassen. Voreingestellt sind `unclassified`, `public`, `internal` und `confidential`.
+Classificator helps you label Markdown notes by classification and see those labels at a glance in Obsidian’s file explorer and note header. The default values are `unclassified`, `public`, `internal`, and `confidential`.
 
-![Einstufungen im Dateibaum und im Notizkopf](assets/screenshots/classification.png)
+Classificator’s role is limited to saving and displaying the label. It saves the value as a regular Obsidian property named `classification` in the note’s YAML frontmatter. Scripts and other plugins can read it and decide how to use it. For example, Langdock Sync uses the property to determine which notes are eligible for synchronization. [Langdock Sync documentation](https://github.com/nblum/obsidian-langdock-sync#freigabe-und-abgleich)
+
+![Classification badges in the file explorer and note header](assets/screenshots/classification.png)
 
 ## Installation
 
-Classificator setzt Obsidian Desktop 1.7.4 oder neuer voraus. Kopiere `manifest.json`, `main.js` und `styles.css` aus einem GitHub-Release oder deinem lokalen Build nach `.obsidian/plugins/classificator/` in deinem Vault. Aktiviere anschließend **Classificator** unter **Einstellungen → Community-Plugins**. [GitHub-Releases](https://github.com/nblum/obsidian-classificator/releases)
+Classificator requires Obsidian Desktop 1.7.4 or later. Copy `manifest.json`, `main.js`, and `styles.css` from a GitHub release or a local build to `.obsidian/plugins/classificator/` in your vault. Then enable **Classificator** under **Settings → Community plugins**. [GitHub releases](https://github.com/nblum/obsidian-classificator/releases)
 
-## Einführung und Plugin-Infos
+## Introduction and plugin information
 
-Beim ersten Start führt Classificator durch die Einstufung von Notizen, Standardwerte und Ordnerregeln. **Einführung anzeigen** und **Über Classificator** findest du in den Einstellungen und in der Befehlspalette.
+On first launch, Classificator walks you through classifying notes, choosing defaults, and setting folder rules. **Show introduction** and **About Classificator** are available in settings and in the command palette.
 
-Oben in den Einstellungen stehen die Plugin-Version, der Autor und Links zu Dokumentation, Repository und Feedback. Beim Ändern einer Einstellung zeigt Classificator den Speicherstatus an. [Einstellungen](assets/screenshots/settings.png) · [Einführung](assets/screenshots/introduction.png) · [Über Classificator](assets/screenshots/about.png)
+The top of the settings tab shows the plugin version, author, and links to documentation, the repository, and feedback. Classificator shows the save status when you change a setting. [Settings](assets/screenshots/settings.png) · [Introduction](assets/screenshots/introduction.png) · [About Classificator](assets/screenshots/about.png)
 
-## Sprache
+## Language
 
-Classificator übernimmt standardmäßig die Sprache von Obsidian. Unter **Einstellungen → Classificator → Sprache** kannst du Deutsch, Englisch, Französisch, Italienisch, Spanisch, Niederländisch, brasilianisches oder europäisches Portugiesisch sowie vereinfachtes Chinesisch wählen. Für weitere Obsidian-Sprachen verwendet Classificator Englisch.
+Classificator follows Obsidian’s language by default. Under **Settings → Classificator → Language**, you can choose German, English, French, Italian, Spanish, Dutch, Brazilian or European Portuguese, or Simplified Chinese. Classificator uses English for other Obsidian languages.
 
-## Notizen einstufen
+## Classify notes
 
-Unter **Einstellungen → Classificator → Neue Notizen** wählst du, was beim Anlegen einer leeren Markdown-Notiz passiert.
+Under **Settings → Classificator → New notes**, choose what happens when you create an empty Markdown note.
 
-| Modus | Verhalten |
+| Mode | Behavior |
 | --- | --- |
-| **Standardwert einsetzen** | Trägt die gewählte Einstufung ein. Voreingestellt ist `unclassified`. |
-| **Bei neuer Notiz nachfragen** | Öffnet die Auswahl. Mit **Überspringen** bleibt die Notiz ohne Einstufung. |
-| **Nur manuell einstufen** | Du stufst die Notiz bei Bedarf selbst ein. |
+| **Apply default value** | Sets the chosen classification. The default is `unclassified`. |
+| **Ask when creating a note** | Opens the classification picker. Choose **Skip** to leave the property unset. |
+| **Classify manually only** | Lets you classify the note when needed. |
 
-Die Modi für neue Notizen gelten für leere Markdown-Dateien mit Ausnahme von `_meta.md`. Wenn du eine Notiz mit Inhalt oder mit einer Vorlage anlegst, kannst du die Einstufung anschließend manuell setzen.
+The new-note modes apply to empty Markdown files and skip `_meta.md`. If you create a note with content or from a template, you can classify it manually afterward.
 
-Verwende dazu den Badge im Notizkopf, den Eintrag **Notiz einstufen** im Datei-Kontextmenü oder **Aktuelle Notiz einstufen** in der Befehlspalette. Obsidian speichert den gewählten Wert am Anfang der Datei.
+Use the note header badge, **Classify note** in the file context menu, or **Classify active note** in the command palette. Obsidian saves the chosen value at the top of the file.
 
 ```yaml
 ---
@@ -38,9 +40,11 @@ classification: internal
 ---
 ```
 
-## Ordnerregeln
+To give several notes the same classification, select them in the file explorer, right-click one of them, and choose **Classify selected notes**. The action applies to selected Markdown notes and skips folders, attachments, and `_meta.md`.
 
-Öffne im Dateibaum per Rechtsklick auf einen Ordner **Classificator: Ordnerregeln**. Dort legst du die Standardeinstufung fest. Classificator speichert sie in der `_meta.md` des Ordners. Du kannst die Datei auch direkt bearbeiten.
+## Folder rules
+
+Right-click a folder in the file explorer and choose **Classificator: Folder rules** to set its default classification. Classificator saves the rule in the folder’s `_meta.md`. You can also edit that file directly.
 
 ```yaml
 ---
@@ -48,21 +52,23 @@ classification: confidential
 ---
 ```
 
-`classification` hat im Modus **Standardwert einsetzen** Vorrang vor dem globalen Standardwert. Wähle dafür eine in Classificator konfigurierte Einstufung. Die Regel gilt für neue leere Notizen direkt in diesem Ordner.
+In **Apply default value** mode, a folder’s `classification` takes precedence over the global default for new empty notes created directly in that folder. Choose a value configured in Classificator.
 
-**Global** im Ordnerdialog entfernt `classification` aus `_meta.md`. Ordner ohne eigene Einstufung verwenden den globalen Standardwert.
+Choose **Global** in the folder dialog to remove `classification` from `_meta.md` and use the global default.
 
-![Ordnerdialog mit voreingestellter Einstufung](assets/screenshots/folder-rules.png)
+**Apply to unclassified notes** is checked by default. When you save, Markdown notes in the folder and its subfolders receive the chosen value if their classification is missing, empty, or set to `unclassified`. **Apply to all children** starts unchecked and takes priority when both boxes are checked. Clear both boxes to save just the folder rule.
 
-## Darstellung und Einstufungen
+![Folder rules dialog with a default classification and checkboxes for existing notes](assets/screenshots/folder-rules.png)
 
-In den Classificator-Einstellungen kannst du die Badges im Dateibaum und im Notizkopf unabhängig voneinander ein- oder ausschalten. Im Dateibaum stehen **Text-Badge** und **Farbpunkt** zur Auswahl. Beim Farbpunkt zeigt der Tooltip die Einstufung an.
+## Appearance and classifications
 
-Unter **Einstufungen** kannst du eigene Werte hinzufügen, Farben ändern und Werte aus der Auswahl entfernen. Bereits in Notizen gespeicherte Werte bleiben dabei erhalten.
+In Classificator settings, you can toggle the file explorer and note header badges independently. For the file explorer, choose **Text badge** or **Color dot**. The color dot’s tooltip shows the classification.
 
-## Entwicklung und Tests
+Under **Classifications**, you can add custom values, change colors, and remove values from the picker. Notes retain any values they already contain.
 
-Voraussetzung ist Node.js 24. Der Build erzeugt `main.js` im Projektverzeichnis für die manuelle Installation.
+## Development and testing
+
+Development requires Node.js 24. The build generates `main.js` in the project directory for manual installation.
 
 ```sh
 npm ci
@@ -74,4 +80,4 @@ npm test
 npm run test:e2e
 ```
 
-`npm test` prüft die Release-Metadaten und Übersetzungen. Die E2E-Tests laufen in einem temporären Vault und prüfen Einstufung, Ordnerregeln, den Erhalt von Notizinhalt und Eigenschaften sowie die Einstellungen und Hilfedialoge. Die Linux-Voraussetzungen und der separate Lauf für Doku-Screenshots stehen in [CONTRIBUTING.md](CONTRIBUTING.md).
+`npm test` checks release metadata and translations. The end-to-end tests use a temporary vault to verify classification, folder rules, preservation of note content and properties, settings, and help dialogs. See the contributor guide for Linux prerequisites and documentation screenshots. [CONTRIBUTING.md](CONTRIBUTING.md)

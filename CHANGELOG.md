@@ -2,9 +2,18 @@
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-11-23
+
+### Added
+
+- Set one classification for multiple selected notes from the file explorer context menu.
+- Use two checkboxes to apply a folder classification to existing notes in the folder and its subfolders. The checkbox for unclassified notes is selected by default.
+- Find Classificator options in Obsidian's settings search on Obsidian 1.13 and later.
+
 ### Changed
 
-- Refresh the Classificator teaser with a 4:3 SVG and PNG exports.
+- Use Obsidian's standard heading in the Classificator settings tab.
+- Provide the README in English and explain how scripts and other plugins can use the `classification` property.
 
 ## [0.2.0]
 

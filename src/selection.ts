@@ -8,7 +8,8 @@ export class ClassificationModal extends Modal {
 
   constructor(
     app: App,
-    private readonly filename: string,
+    private readonly title: string,
+    private readonly description: string,
     private readonly options: readonly Classification[],
     currentValue: string | undefined,
     private readonly translate: Translator,
@@ -21,8 +22,8 @@ export class ClassificationModal extends Modal {
   override onOpen(): void {
     const t = this.translate;
     this.modalEl.addClass("classificator-selection-modal");
-    this.setTitle(t("note.classify"));
-    this.contentEl.createEl("p", { text: this.filename });
+    this.setTitle(this.title);
+    this.contentEl.createEl("p", { text: this.description });
     let saveButton: ButtonComponent | undefined;
 
     new Setting(this.contentEl)
