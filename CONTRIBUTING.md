@@ -1,5 +1,13 @@
 # Contributing to Classificator
 
+## Shared plugin rules
+
+Read the shared Obsidian plugin rules before working on the plugin. The `.obsidian-plugin-rules` file at the repository root contains the absolute path to the rules note on a single line. Git ignores the file. If the reference is missing or the note is inaccessible, ask the user where the note is stored and use that path to set up the local reference.
+
+Add new rules that apply to Obsidian plugins generally to the shared note. Keep Classificator-specific guidance in this repository.
+
+## Development
+
 Use Node.js 24 (`nvm use`) and install the locked dependencies with `npm ci`.
 
 | Command | Purpose |
@@ -28,6 +36,8 @@ Run `npm run screenshots` to produce a preview gallery at `e2e-results/screensho
 The separate capture suite uses Obsidian 1.15.1 by default, a temporary copy of the documentation vault, the light theme, and English. It uses the same Linux display requirements as the E2E suite. Set `OBSIDIAN_VERSION` to capture another version or `E2E_HEADED=1` to watch the capture. Register added images in `tests/e2e/screenshot-assets.json` and capture them in `tests/e2e/documentation.capture.ts`.
 
 ## Releases
+
+Before each new release, read the current [shared plugin rules](#shared-plugin-rules) and review the full checklist against the release candidate. Resolve any unmet applicable pre-release requirements before publishing. Complete the checklist's post-release checks after publication.
 
 1. Record user-visible changes under `## [Unreleased]` in [CHANGELOG.md](CHANGELOG.md).
 2. Run `npm run release:prepare -- <version>` for a version newer than the manifest. This updates `manifest.json`, `package.json`, `package-lock.json` and `versions.json`, and moves the release notes to the version heading. If the minimum Obsidian version changes, update the manifest, the new version's entry in `versions.json`, and the E2E baseline in `wdio.conf.mts` and CI. Preserve compatibility entries for prior releases.

@@ -5,6 +5,8 @@ description: Implement or fix Classificator plugin behavior, including note clas
 
 # Implement Classificator
 
+Read the [shared plugin rules](../../CONTRIBUTING.md#shared-plugin-rules) through `.obsidian-plugin-rules` at the repository root. Ask the user for the note's location if the reference is missing or the note is inaccessible. Add any new general plugin rules to the shared note.
+
 Read [README.md](../../README.md) and [CONTRIBUTING.md](../../CONTRIBUTING.md). Trace the behavior through the entry point in `src/main.ts` and the affected module in `src/`.
 
 - Persist classifications in the `classification` YAML property through Obsidian's `processFrontMatter`. Preserve unrelated properties and note content. Automatic classification applies to new empty Markdown notes, excludes `_meta.md`, and respects an existing property even if Obsidian's metadata cache is stale.
