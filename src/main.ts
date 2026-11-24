@@ -287,18 +287,22 @@ export default class Classificator extends Plugin {
         draft ??= { classification: currentClassification ?? "", mode: "unclassified", recursive: false };
         const dialogDraft = draft;
         const action = await new Promise<FolderSettingsAction | undefined>((resolve) => {
-          this.modal = new FolderSettingsModal(this.app, path, dialogDraft, fallback, settings, this.translate, resolve);
+          this.modal = new FolderSettingsModal(
+            this.app, path, dialogDraft, currentClassification ?? "", fallback, settings, this.translate, resolve,
+          );
           this.modal.open();
         });
         this.modal = undefined;
         if (!action || !isCurrent()) return;
-        if (action.kind === "save") {
-          if (action.classification !== (currentClassification ?? null)) {
-            await writeFolderClassification(this.app, folder, action.classification);
-          }
-          return;
-        }
         draft = action.draft;
+        if (action.kind === "save") {
+          const classification = draft.classification || null;
+          if (classification !== (currentClassification ?? null)) {
+            await writeFolderClassification(this.app, folder, classification);
+            if (isCurrent()) new Notice(this.translate("folder.defaultSaved"));
+          }
+          continue;
+        }
         const notes: TFile[] = [];
         if (draft.recursive) {
           Vault.recurseChildren(folder, (file) => {

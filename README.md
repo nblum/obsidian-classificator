@@ -98,9 +98,9 @@ classification: confidential
 
 In **Apply default value** mode, a folder’s `classification` takes precedence over the global default for new empty notes. Enable **Inherit folder rules** in Classificator settings to let folders without a rule use the nearest ancestor’s rule, including a rule at the vault root. The folder dialog shows the inherited value and its source. Classificator uses the global default when no applicable folder provides a rule. If the applicable rule contains an unconfigured value, automatic classification skips the note until the rule is corrected.
 
-To remove a folder’s own rule, choose the **Global** or **Inherited from** option and select **Save rule**. This updates the default for future notes.
+Select **Save default** beside the classification picker to save the default for future notes. To remove the folder’s own rule, choose **Global** or **Inherited from** before saving. The dialog stays open so you can also update existing notes.
 
-To update existing notes, choose the scope and which notes to update, then select **Preview changes**. By default it considers notes directly in the folder with a missing, empty, or `unclassified` value. You can include subfolders or switch to all notes. For a recursive batch, the selected value applies throughout the scope, including subfolders with their own rule. **Apply changes** updates the notes. Use **Save rule** separately to persist the selected default.
+Under **Existing notes**, choose the scope and which notes to update, then select **Preview changes**. By default it considers notes directly in the folder with a missing, empty, or `unclassified` value. You can include subfolders or switch to all notes. For a recursive batch, the selected value applies throughout the scope, including subfolders with their own rule. Select **Apply changes** in the preview to update the notes.
 
 ![Folder rules dialog with a default classification, scope and preview for existing notes](assets/screenshots/folder-rules.png)
 

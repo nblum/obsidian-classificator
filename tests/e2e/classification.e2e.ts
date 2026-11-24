@@ -609,19 +609,32 @@ describe("Classificator in Obsidian", () => {
     await expect($(`${folderClassification} option:checked`)).toHaveText("Geerbt von Projects (confidential)");
   });
 
-  it("creates _meta.md with the classification selected in a folder's context menu", async () => {
+  it("saves the folder default and keeps the scope for updating existing notes", async () => {
     await createFolder("Projects");
-    const note = "Projects/Brief.md";
+    await createFolder("Projects/Archive");
+    const note = "Projects/Archive/Brief.md";
     const contents = "Existing brief.\n";
     await createFile(note, contents);
     await openFolderSettings("Projects");
+    const save = () => $(folderModal).$("button=Standard speichern");
+    await expect(save()).toBeDisabled();
     await $(folderClassification).selectByAttribute("value", "internal");
-    await $(folderModal).$("button=Regel speichern").click();
+    await $(folderScope).selectByAttribute("value", "recursive");
+    await $(folderNoteMode).selectByAttribute("value", "always");
+    await save().click();
 
-    await openFolderSettings("Projects");
-    expect(await $(folderClassification).getValue()).toBe("internal");
+    await expect(save()).toBeDisabled();
+    await expect($(folderClassification)).toHaveValue("internal");
+    await expect($(folderScope)).toHaveValue("recursive");
+    await expect($(folderNoteMode)).toHaveValue("always");
     expect(await obsidianPage.read("Projects/_meta.md")).toMatch(/^classification: internal$/m);
     expect(await obsidianPage.read(note)).toBe(contents);
+
+    await $(folderModal).$("button=Änderungen prüfen").click();
+    await expect($(preview).$("summary=Neu setzen (1)")).toBeDisplayed();
+    expect(await obsidianPage.read(note)).toBe(contents);
+    await $(preview).$("button=Änderungen anwenden").click();
+    await browser.waitUntil(async () => /^classification: internal$/m.test(await obsidianPage.read(note)));
   });
 
   it("previews folder batches by scope, applies them separately, and skips changes made after review", async () => {
@@ -692,7 +705,7 @@ describe("Classificator in Obsidian", () => {
     expect(await obsidianPage.read(nestedRules)).toBe(ruleContents);
     expect(await obsidianPage.read(attachment)).toBe("Attachment contents.");
     expect(await obsidianPage.read(existing)).toBe(outsideContents);
-    await $(folderModal).$("button=Regel speichern").click();
+    await $(folderModal).$("button=Standard speichern").click();
     await browser.waitUntil(async () => /^classification: confidential$/m.test(await obsidianPage.read("Projects/_meta.md")));
   });
 
@@ -704,7 +717,7 @@ describe("Classificator in Obsidian", () => {
     await openFolderSettings("Projects");
     expect(await $(folderClassification).getValue()).toBe("confidential");
     await $(folderClassification).selectByAttribute("value", "");
-    await $(folderModal).$("button=Regel speichern").click();
+    await $(folderModal).$("button=Standard speichern").click();
 
     await browser.waitUntil(async () => !(await obsidianPage.read("Projects/_meta.md")).includes("classification:"));
     const metadata = await obsidianPage.read("Projects/_meta.md");

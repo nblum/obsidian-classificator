@@ -12,7 +12,7 @@ export interface FolderSettingsDraft {
 }
 
 export type FolderSettingsAction =
-  | { kind: "save"; classification: string | null }
+  | { kind: "save"; draft: FolderSettingsDraft }
   | { kind: "preview"; value: string; draft: FolderSettingsDraft };
 
 export class FolderSettingsModal extends Modal {
@@ -20,6 +20,7 @@ export class FolderSettingsModal extends Modal {
     app: App,
     private readonly path: string,
     private readonly draft: FolderSettingsDraft,
+    private readonly savedClassification: string,
     private readonly fallback: FolderDefault,
     private readonly settings: ClassificatorSettings,
     private readonly translate: Translator,
@@ -31,7 +32,9 @@ export class FolderSettingsModal extends Modal {
   override onOpen(): void {
     const { fallback, settings, translate: t } = this;
     const draft = { ...this.draft };
+    let saveButton: ButtonComponent | undefined;
     let previewButton: ButtonComponent | undefined;
+    const canSave = () => draft.classification !== this.savedClassification;
     const target = () => draft.classification || fallback.value;
     const canPreview = () => settings.classifications.some(({ value }) => value === target());
     this.modalEl.addClass("classificator-folder-settings-modal");
@@ -46,6 +49,7 @@ export class FolderSettingsModal extends Modal {
       ? t("folder.global", { value: fallbackValue })
       : t("folder.inherited", { folder: fallback.folderPath, value: fallbackValue });
     new Setting(this.contentEl).setName(t("folder.default")).setDesc(t("folder.description"))
+      .setClass("classificator-folder-actions")
       .addDropdown((dropdown) => {
         dropdown.selectEl.setAttribute("aria-label", t("folder.default"));
         dropdown.addOption("", fallbackLabel);
@@ -55,11 +59,20 @@ export class FolderSettingsModal extends Modal {
         }
         dropdown.setValue(draft.classification).onChange((value) => {
           draft.classification = value;
+          saveButton?.setDisabled(!canSave());
           previewButton?.setDisabled(!canPreview());
+        });
+      })
+      .addButton((button) => {
+        saveButton = button;
+        button.setButtonText(t("folder.saveRule")).setDisabled(!canSave()).onClick(() => {
+          this.onFinish({ kind: "save", draft });
+          this.close();
         });
       });
 
-    new Setting(this.contentEl).setHeading().setName(t("folder.existingNotes"));
+    new Setting(this.contentEl).setHeading().setName(t("folder.existingNotes"))
+      .setDesc(t("folder.existingNotesHelp"));
     new Setting(this.contentEl).setName(t("folder.scope")).addDropdown((dropdown) => {
       dropdown.selectEl.setAttribute("aria-label", t("folder.scope"));
       dropdown.addOption("direct", t("folder.direct"))
@@ -75,11 +88,7 @@ export class FolderSettingsModal extends Modal {
         .onChange((value) => { draft.mode = value === "always" ? "always" : "unclassified"; });
     });
     new Setting(this.contentEl).setClass("classificator-folder-actions")
-      .addButton((button) => button.setButtonText(t("actions.cancel")).onClick(() => this.close()))
-      .addButton((button) => button.setButtonText(t("folder.saveRule")).onClick(() => {
-        this.onFinish({ kind: "save", classification: draft.classification || null });
-        this.close();
-      }))
+      .addButton((button) => button.setButtonText(t("actions.close")).onClick(() => this.close()))
       .addButton((button) => {
         previewButton = button;
         button.setButtonText(t("batch.preview")).setCta().setDisabled(!canPreview()).onClick(() => {
