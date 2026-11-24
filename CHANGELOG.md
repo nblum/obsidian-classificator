@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.5.1] - 2026-11-24
+
 ### Changed
 
 - Place **Save default** beside the folder default. Keep the dialog open with the chosen scope so you can review and apply changes to existing notes afterward.
