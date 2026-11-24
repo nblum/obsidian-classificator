@@ -32,7 +32,7 @@ Under **Settings → Classificator → New notes**, choose what happens when you
 
 The new-note modes apply to empty Markdown files and skip `_meta.md`. If you create a note with content or from a template, you can classify it manually afterward.
 
-Click a badge in the note header or file explorer, then click a classification to apply it immediately. You can also use **Classify note** in the file context menu or **Classify active note** in the command palette. Obsidian saves the chosen value at the top of the file.
+Obsidian saves a note’s classification as a property at the top of the file. You can edit it directly in **Properties** or in Source mode.
 
 ```yaml
 ---
@@ -40,20 +40,41 @@ classification: internal
 ---
 ```
 
-To give several notes the same classification, select them in the file explorer, right-click one of them, and choose **Classify selected notes**. Select a value and open **Preview changes**. Expand each group to see which files will get a new value, be overwritten, or be skipped. The batch runs when you choose **Apply changes**. It skips folders, `_meta.md`, and files whose path or classification changed after the preview.
+## Change a classification
+
+1. Open a note or attachment in Obsidian. Click its current classification or **Classify** in the header at the top right. You can also click its text badge or color dot in the file explorer.
+2. Choose a value from the menu. A check mark identifies the current value. Classificator saves your selection immediately and updates the badges.
+
+![The classification menu opened from the badge in a PDF tab](assets/screenshots/change-classification.png)
+
+To set a classification from the file explorer, right-click the file and choose **Classify note** or **Classify attachment**. Pick a value and click **Save**. For an open Markdown note, **Classificator: Classify active note** in the command palette opens the same picker.
+
+You can also [change the values offered in the picker](#appearance-and-classifications) in Classificator settings.
+
+## File explorer
+
+In Obsidian’s left sidebar, open **Files** using the folder icon. Classificator displays text badges and color dots at the right edge of the file rows. Attachment rows also show the file extension.
+
+![The Files sidebar with the tag button, a note with a color dot, and PDF and PNG attachments with classifications](assets/screenshots/file-explorer.png)
+
+- Click a badge or dot to choose a classification without opening the file. Hover over a dot to read its value.
+- Click the tag icon in the toolbar above the file tree to toggle all badges and dots in the explorer. The file header has its own text badge, and Classificator remembers the explorer setting for each vault.
+- To apply one value to several files, select their rows and right-click one of the selected files. Choose **Classify selected notes**, or **Classify selected files** if the selection includes an attachment. Pick a value and open **Preview changes**. Expand the groups for new values, overwrites, and skips to review the files. Click **Apply changes** to save the batch. Folders, `_meta.md`, and files whose path or classification changed after the preview are skipped.
 
 ## Classify attachments
 
-Open an attachment in Obsidian and click **Classify** or the current classification in its header to choose a value. You can also right-click the attachment in the file explorer and choose **Classify attachment**, or click its existing badge there. To classify multiple attachments or a mix of notes and attachments, use **Classify selected files**. To display DOCX and other file types that Obsidian cannot open by default, enable **Settings → Files and links → Show all file types**.
+Classify PDFs, images such as PNG, JPG, or SVG, audio such as MP3, and video such as MP4 directly from the file explorer. For attachments you open in an Obsidian tab, such as a PDF or image, the **Classify** button or current classification in the header opens the same quick menu as for a note. [File types Obsidian can open](https://obsidian.md/help/file-formats)
 
-Classificator saves the attachment’s classification in the YAML frontmatter of `_meta.md` in the same folder. The `attachment-classifications` mapping uses full filenames, including the extension. The attachment stays unchanged. Edit the mapping in Source mode to adjust values directly.
+For DOCX, XLSX, ZIP, and other files that Obsidian can list without opening them in a tab, turn on **Settings → Files and links → Show all file types**. Older Obsidian versions call this **Detect all file extensions**. Right-click the file in the explorer and choose **Classify attachment**. [Obsidian Files and links settings](https://obsidian.md/help/settings#Show%20all%20file%20types)
+
+Classificator stores a separate value for each attachment, including those embedded in notes. It saves the value in the YAML frontmatter of `_meta.md` in the same folder. The `attachment-classifications` mapping uses full filenames, including the extension. Edit the mapping in Source mode to adjust values directly.
 
 ```yaml
 ---
 classification: internal
 attachment-classifications:
   Offer.pdf: confidential
-  Team photo.jpg: public
+  Cover.png: public
 ---
 ```
 
@@ -85,11 +106,13 @@ To update existing notes, choose the scope and which notes to update, then selec
 
 ## Appearance and classifications
 
-Use the tag icon next to the file explorer’s new note and new folder buttons to toggle all explorer badges and dots. Classificator remembers this choice for the vault and restores your configured styles when you turn the display back on.
+Open **Settings → Classificator → Classifications** to change the choices in the picker and their appearance.
 
-Under **Settings → Classificator → Classifications**, choose **Text badge**, **Color dot**, or **Hidden** for each classification in the file explorer. Badges and dots appear at the right edge of each file row. Hover over a dot to see the classification. The file header always shows a text badge.
+- Use **New classification** to enter a value such as `restricted`, then click **Add**.
+- For each value, choose its **Color** and its appearance in the file explorer. The available styles are **Text badge**, **Color dot**, and **Hidden**.
+- To replace a value, add the new one, reclassify the affected files, then use the trash icon to remove the old value from the picker. Notes that still have the old value appear under **Unknown classification** in the classification overview.
 
-Existing classifications start with the previous global file explorer settings. You can also add custom values, change colors, and remove values from the picker. Notes retain any values they already contain.
+If you upgrade from a version with a global explorer style, existing classifications start with that style.
 
 ## Development and testing
 

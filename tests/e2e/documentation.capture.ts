@@ -1,4 +1,4 @@
-import { mkdir, rm, writeFile } from "node:fs/promises";
+import { copyFile, mkdir, rm, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { $, browser, expect } from "@wdio/globals";
 import { obsidianPage } from "wdio-obsidian-service";
@@ -10,6 +10,8 @@ const output = resolve("e2e-results/screenshots");
 const intro = ".classificator-introduction-modal";
 const about = ".classificator-about-modal";
 const folder = ".classificator-folder-settings-modal";
+const headerBadge = ".workspace-leaf.mod-active .classificator-badge--header";
+const lastExplorerRow = '.nav-file-title[data-path="Team playbook.md"]';
 type Region = { x: number; y: number; width: number; height: number };
 
 async function setViewport(): Promise<void> {
@@ -58,6 +60,18 @@ async function settingsRegion(): Promise<Region> {
   });
 }
 
+async function explorerRegion(): Promise<Region> {
+  await $(lastExplorerRow).waitForStable();
+  return browser.execute((rowSelector) => {
+    const toolbar = document.querySelector(".nav-header")?.getBoundingClientRect();
+    const lastRow = document.querySelector(rowSelector)?.getBoundingClientRect();
+    if (!toolbar || !lastRow) throw new Error("The file explorer toolbar or final row is missing.");
+    const x = Math.floor(toolbar.left);
+    const y = Math.floor(toolbar.top);
+    return { x, y, width: Math.ceil(toolbar.right) - x, height: Math.ceil(lastRow.bottom) + 16 - y };
+  }, lastExplorerRow);
+}
+
 describe("Classificator documentation screenshots (opt-in)", () => {
   before(async () => {
     await mkdir(output, { recursive: true });
@@ -65,18 +79,19 @@ describe("Classificator documentation screenshots (opt-in)", () => {
       rm(join(output, filename), { force: true })));
     await writeFile(join(obsidianPage.getVaultPath(), ".obsidian", "plugins", pluginId, "data.json"),
       JSON.stringify({ language: "en" }));
+    await copyFile("assets/teaser/teaser.png", join(obsidianPage.getVaultPath(), "Projects", "Cover.png"));
     await setViewport();
     await obsidianPage.enablePlugin(pluginId);
   });
 
-  it("captures the introduction, classification, folder rules, settings and About dialog", async () => {
+  it("captures classification workflows, the file explorer, settings and help", async () => {
     await expect($(`${intro} h3`)).toHaveText("Classify a note");
     await capture("introduction.png", intro);
     await browser.keys("Escape");
 
     await obsidianPage.openFile("Release notes.md");
-    await expect($(".workspace-leaf.mod-active .classificator-badge--header")).toHaveText("public");
-    await expect($('.nav-file-title[data-path="Team playbook.md"] .classificator-badge--explorer')).toHaveText("internal");
+    await expect($(headerBadge)).toHaveText("public");
+    await expect($(`${lastExplorerRow} .classificator-badge--explorer`)).toHaveText("internal");
     // Exclude the vault switcher below the note. Its temporary name changes between runs.
     await capture("classification.png", { x: 0, y: 0, width: 1280, height: 560 });
 
@@ -101,5 +116,20 @@ describe("Classificator documentation screenshots (opt-in)", () => {
     await expect($(`${about} .modal-title`)).toHaveText("About Classificator");
     await capture("about.png", about);
     await browser.keys("Escape");
+
+    await $('.nav-folder-title[data-path="Projects"]').click();
+    await expect($('.nav-file-title[data-path="Projects/Offer.pdf"] .classificator-badge--explorer')).toHaveText("confidential");
+    await expect($('.nav-file-title[data-path="Projects/Cover.png"] .classificator-badge--dot')).toBeDisplayed();
+    await capture("file-explorer.png", await explorerRegion());
+
+    await obsidianPage.openFile("Projects/Offer.pdf");
+    await expect($(headerBadge)).toHaveText("confidential");
+    await expect($(".workspace-leaf.mod-active .pdf-viewer-container .page canvas")).toBeDisplayed();
+    await $(headerBadge).click();
+    await expect($(".menu-item-title=internal")).toBeDisplayed();
+    await capture("change-classification.png", { x: 344, y: 40, width: 936, height: 330 });
+    await $(".menu-item-title=internal").click();
+    await expect($(headerBadge)).toHaveText("internal");
+    expect(await obsidianPage.read("Projects/_meta.md")).toContain("Offer.pdf: internal");
   });
 });
