@@ -1,8 +1,8 @@
 # Classificator
 
-Classificator helps you label Markdown notes by classification and see those labels at a glance in Obsidian’s file explorer and note header. The default values are `unclassified`, `public`, `internal`, and `confidential`.
+Classificator helps you label Markdown notes and attachments in Obsidian’s file explorer and in the header of an open file. The default values are `unclassified`, `public`, `internal`, and `confidential`.
 
-Classificator’s role is limited to saving and displaying the label. It saves the value as a regular Obsidian property named `classification` in the note’s YAML frontmatter. Scripts and other plugins can read it and decide how to use it. For example, Langdock Sync uses the property to determine which notes are eligible for synchronization. [Langdock Sync documentation](https://github.com/nblum/obsidian-langdock-sync#freigabe-und-abgleich)
+Classificator’s role is limited to saving and displaying the label. It saves a note’s classification as the `classification` property in its YAML frontmatter. Scripts and other plugins can read it and decide how to use it. For example, Langdock Sync uses the property to determine which notes are eligible for synchronization. [Langdock Sync documentation](https://github.com/nblum/obsidian-langdock-sync#freigabe-und-abgleich)
 
 ![Classification badges in the file explorer and note header](assets/screenshots/classification.png)
 
@@ -40,7 +40,30 @@ classification: internal
 ---
 ```
 
-To give several notes the same classification, select them in the file explorer, right-click one of them, and choose **Classify selected notes**. The action applies to selected Markdown notes and skips folders, attachments, and `_meta.md`.
+To give several notes the same classification, select them in the file explorer, right-click one of them, and choose **Classify selected notes**. Select a value and open **Preview changes**. Expand each group to see which files will get a new value, be overwritten, or be skipped. The batch runs when you choose **Apply changes**. It skips folders, `_meta.md`, and files whose path or classification changed after the preview.
+
+## Classify attachments
+
+Open an attachment in Obsidian and click **Classify** or the current classification in its header to choose a value. You can also right-click the attachment in the file explorer and choose **Classify attachment**, or click its existing badge there. To classify multiple attachments or a mix of notes and attachments, use **Classify selected files**. To display DOCX and other file types that Obsidian cannot open by default, enable **Settings → Files and links → Show all file types**.
+
+Classificator saves the attachment’s classification in the YAML frontmatter of `_meta.md` in the same folder. The `attachment-classifications` mapping uses full filenames, including the extension. The attachment stays unchanged. Edit the mapping in Source mode to adjust values directly.
+
+```yaml
+---
+classification: internal
+attachment-classifications:
+  Offer.pdf: confidential
+  Team photo.jpg: public
+---
+```
+
+The top-level `classification` is the folder’s default for new notes. In Classificator, `_meta.md` itself always counts as `unclassified`. Integrations reading YAML directly should skip `_meta.md` when reading individual note classifications.
+
+Classificator updates the attachment entry when it sees an Obsidian rename or move and removes it when it sees a deletion. A move to another folder stores the entry in the destination’s `_meta.md`. Folder defaults and the new-note modes apply to Markdown notes.
+
+## Classification overview
+
+Open **Classificator: Classification overview** from the command palette to find notes with missing or empty classifications, notes explicitly set to `unclassified`, and notes with unknown values. Unknown values include classifications removed from settings and properties stored in a format other than text. Filter by status and folder, including that folder’s subfolders. Select a result to open the note.
 
 ## Folder rules
 
@@ -52,17 +75,19 @@ classification: confidential
 ---
 ```
 
-In **Apply default value** mode, a folder’s `classification` takes precedence over the global default for new empty notes created directly in that folder. Choose a value configured in Classificator.
+In **Apply default value** mode, a folder’s `classification` takes precedence over the global default for new empty notes. Enable **Inherit folder rules** in Classificator settings to let folders without a rule use the nearest ancestor’s rule, including a rule at the vault root. The folder dialog shows the inherited value and its source. Classificator uses the global default when no applicable folder provides a rule. If the applicable rule contains an unconfigured value, automatic classification skips the note until the rule is corrected.
 
-Choose **Global** in the folder dialog to remove `classification` from `_meta.md` and use the global default.
+To remove a folder’s own rule, choose the **Global** or **Inherited from** option and select **Save rule**. This updates the default for future notes.
 
-**Apply to unclassified notes** is checked by default. When you save, Markdown notes in the folder and its subfolders receive the chosen value if their classification is missing, empty, or set to `unclassified`. **Apply to all children** starts unchecked and takes priority when both boxes are checked. Clear both boxes to save just the folder rule.
+To update existing notes, choose the scope and which notes to update, then select **Preview changes**. By default it considers notes directly in the folder with a missing, empty, or `unclassified` value. You can include subfolders or switch to all notes. For a recursive batch, the selected value applies throughout the scope, including subfolders with their own rule. **Apply changes** updates the notes. Use **Save rule** separately to persist the selected default.
 
-![Folder rules dialog with a default classification and checkboxes for existing notes](assets/screenshots/folder-rules.png)
+![Folder rules dialog with a default classification, scope and preview for existing notes](assets/screenshots/folder-rules.png)
 
 ## Appearance and classifications
 
-Under **Settings → Classificator → Classifications**, choose **Text badge**, **Color dot**, or **Hidden** for each classification in the file explorer. Hover over a dot to see the classification. The note header always shows a text badge.
+Use the tag icon next to the file explorer’s new note and new folder buttons to toggle all explorer badges and dots. Classificator remembers this choice for the vault and restores your configured styles when you turn the display back on.
+
+Under **Settings → Classificator → Classifications**, choose **Text badge**, **Color dot**, or **Hidden** for each classification in the file explorer. Badges and dots appear at the right edge of each file row. Hover over a dot to see the classification. The file header always shows a text badge.
 
 Existing classifications start with the previous global file explorer settings. You can also add custom values, change colors, and remove values from the picker. Notes retain any values they already contain.
 

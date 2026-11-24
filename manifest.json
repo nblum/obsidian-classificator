@@ -1,7 +1,7 @@
 {
   "id": "classificator",
   "name": "Classificator",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "minAppVersion": "1.7.4",
   "description": "Classify notes on creation and display their classification in the file explorer and note header.",
   "author": "Nico Blum",

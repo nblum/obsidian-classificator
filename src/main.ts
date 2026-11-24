@@ -1,26 +1,26 @@
 import { getLanguage, Menu, moment, Notice, Plugin, requireApiVersion, TFile, TFolder, Vault } from "obsidian";
 import type { Command, Modal, TAbstractFile } from "obsidian";
+import { cachedAttachmentClassification, moveAttachmentClassification, readAttachmentClassification, writeAttachmentClassification } from "./attachment-classification";
 import { ClassificationBadges } from "./badges";
-import { CLASSIFICATION_FIELD, FOLDER_META_FILENAME, readFolderClassification, writeFolderClassification } from "./folder-settings";
+import { BatchPreviewModal } from "./batch-preview";
+import { FOLDER_META_FILENAME } from "./folder-metadata";
+import { readFolderClassification, resolveFolderDefault, writeFolderClassification } from "./folder-settings";
 import { FolderSettingsModal } from "./folder-settings-modal";
-import type { FolderSettingsSelection } from "./folder-settings-modal";
+import type { FolderSettingsAction, FolderSettingsDraft } from "./folder-settings-modal";
 import { AboutModal, IntroductionModal } from "./help";
 import { createTranslator, isLanguagePreference, resolveLanguage } from "./i18n";
 import type { TranslationKey } from "./i18n";
+import { CLASSIFICATION_FIELD, UNCLASSIFIED, classificationSnapshot, isExplicitlyUnclassified, isMissingClassification, previewClassification, previewValue } from "./note-classification";
+import type { BatchEntry, BatchMode } from "./note-classification";
+import { ClassificationOverview } from "./overview";
 import { ClassificationModal } from "./selection";
-import { ClassificatorSettingTab, DEFAULT_SETTINGS, UNCLASSIFIED } from "./settings";
+import { ClassificatorSettingTab, DEFAULT_SETTINGS } from "./settings";
 import type { ClassificatorSettings } from "./settings";
 
-type WriteMode = "always" | "missing" | "unclassified";
+type WriteMode = BatchMode | "missing";
+type WriteResult = "changed" | "skipped" | "failed";
 
 const KEEP_CLASSIFICATION = new Error("Keep existing classification");
-
-function isUnclassified(value: unknown): boolean {
-  if (value === undefined || value === null) return true;
-  if (typeof value !== "string") return false;
-  const trimmed = value.trim();
-  return trimmed === "" || trimmed === UNCLASSIFIED;
-}
 
 export default class Classificator extends Plugin {
   override settings: ClassificatorSettings = DEFAULT_SETTINGS;
@@ -30,6 +30,7 @@ export default class Classificator extends Plugin {
   private classificationMenu?: Menu;
   private modal?: Modal;
   private prompts = Promise.resolve();
+  private attachmentWrites = Promise.resolve();
   private settingsWrite = Promise.resolve();
   private stopped = false;
 
@@ -38,6 +39,7 @@ export default class Classificator extends Plugin {
     this.settings = {
       ...DEFAULT_SETTINGS,
       ...savedSettings,
+      inheritFolderRules: savedSettings?.inheritFolderRules === true,
       language: isLanguagePreference(savedSettings?.language) ? savedSettings.language : DEFAULT_SETTINGS.language,
     };
     this.applyLanguage();
@@ -47,7 +49,7 @@ export default class Classificator extends Plugin {
       id: "classify-note",
       checkCallback: (checking) => {
         const file = this.app.workspace.getActiveFile();
-        if (!this.isNote(file)) return false;
+        if (!file || !this.isBatchNote(file)) return false;
         if (!checking) void this.selectForFile(file);
         return true;
       },
@@ -60,6 +62,10 @@ export default class Classificator extends Plugin {
       id: "show-about",
       callback: () => this.showAbout(),
     });
+    this.addLocalizedCommand("commands.showOverview", {
+      id: "classification-overview",
+      callback: () => { void this.showOverview(); },
+    });
 
     const { workspace, vault, metadataCache } = this.app;
     this.registerEvent(workspace.on("file-menu", (menu, file) => {
@@ -70,19 +76,20 @@ export default class Classificator extends Plugin {
           .onClick(() => { void this.editFolderSettings(file); }));
         return;
       }
-      if (!this.isNote(file)) return;
+      if (!this.isClassifiable(file)) return;
       menu.addItem((item) => item
-        .setTitle(this.translate("note.classify"))
+        .setTitle(this.translate(this.isNote(file) ? "note.classify" : "attachment.classify"))
         .setIcon("tag")
         .onClick(() => { void this.selectForFile(file); }));
     }));
     this.registerEvent(workspace.on("files-menu", (menu, files) => {
-      const notes = files.filter((file) => this.isBatchNote(file));
-      if (!notes.length) return;
+      const selection = files.filter((file) => this.isClassifiable(file));
+      if (!selection.length) return;
+      const includesAttachments = selection.some((file) => !this.isNote(file));
       menu.addItem((item) => item
-        .setTitle(this.translate("note.classifySelected"))
+        .setTitle(this.translate(includesAttachments ? "attachment.classifySelected" : "note.classifySelected"))
         .setIcon("tag")
-        .onClick(() => { void this.selectForFiles(notes); }));
+        .onClick(() => { void this.selectForFiles(selection, includesAttachments); }));
     }));
 
     const refresh = () => this.badges?.refresh();
@@ -90,8 +97,14 @@ export default class Classificator extends Plugin {
     this.registerEvent(workspace.on("file-open", refresh));
     this.registerEvent(workspace.on("active-leaf-change", refresh));
     this.registerEvent(metadataCache.on("changed", refresh));
-    this.registerEvent(vault.on("rename", refresh));
-    this.registerEvent(vault.on("delete", refresh));
+    this.registerEvent(vault.on("rename", (file, oldPath) => {
+      if (file instanceof TFile) this.onAttachmentPathChange(oldPath, this.isNote(file) ? null : file);
+      refresh();
+    }));
+    this.registerEvent(vault.on("delete", (file) => {
+      if (file instanceof TFile) this.onAttachmentPathChange(file.path, null);
+      refresh();
+    }));
     workspace.onLayoutReady(() => {
       if (this.stopped) return;
       this.registerEvent(vault.on("create", (file) => this.onCreate(file)));
@@ -116,6 +129,13 @@ export default class Classificator extends Plugin {
     const write = this.settingsWrite.then(() => this.saveData(settings));
     this.settingsWrite = write.catch(() => undefined);
     return write;
+  }
+
+  toggleExplorerClassifications(): void {
+    if (this.stopped) return;
+    void this.updateSettings({ showExplorerClassifications: !this.settings.showExplorerClassifications }).catch(() => {
+      if (!this.stopped) new Notice(this.translate("errors.settingsSave"));
+    });
   }
 
   private addLocalizedCommand(key: TranslationKey, options: Omit<Command, "name">): void {
@@ -154,13 +174,33 @@ export default class Classificator extends Plugin {
     this.modal = undefined;
   }
 
+  private showOverview(): Promise<void> {
+    return this.queuePrompt(async () => {
+      const files = this.app.vault.getMarkdownFiles().filter((file) => this.isBatchNote(file));
+      const configured = new Set(this.settings.classifications.map(({ value }) => value));
+      await new Promise<void>((resolve) => {
+        this.modal = new ClassificationOverview(this.app, files, configured, this.translate, (file) => {
+          if (!this.canWrite(file)) return;
+          void this.app.workspace.getLeaf(false).openFile(file).catch(() => {
+            if (!this.stopped) new Notice(this.translate("errors.openOverviewNote", { name: file.basename }));
+          });
+        }, resolve);
+        this.modal.open();
+      });
+      this.modal = undefined;
+    }, "errors.openOverview");
+  }
+
   getClassification(file: TFile): string | undefined {
-    const value: unknown = this.app.metadataCache.getFileCache(file)?.frontmatter?.[CLASSIFICATION_FIELD];
+    if (file.name === FOLDER_META_FILENAME) return UNCLASSIFIED;
+    const value: unknown = this.isNote(file)
+      ? this.app.metadataCache.getFileCache(file)?.frontmatter?.[CLASSIFICATION_FIELD]
+      : cachedAttachmentClassification(this.app, file);
     return typeof value === "string" && value.trim() ? value : undefined;
   }
 
   showClassificationMenu(file: TFile, badge: HTMLElement): void {
-    if (this.stopped || !this.isNote(file) || !this.canWrite(file)) return;
+    if (this.stopped || !this.isClassifiable(file) || !this.canWrite(file)) return;
     const { classifications } = this.settings;
     if (!classifications.length) {
       new Notice(this.translate("errors.noClassifications"));
@@ -188,30 +228,36 @@ export default class Classificator extends Plugin {
 
   selectForFile(file: TFile, onlyIfMissing = false): Promise<void> {
     return this.queuePrompt(async () => {
-      if (!this.canWrite(file)) return;
+      if (!this.isClassifiable(file) || !this.canWrite(file)) return;
       if (onlyIfMissing) {
         const frontmatter = this.app.metadataCache.getFileCache(file)?.frontmatter;
         if (!this.settings.classifications.length || (frontmatter && Object.hasOwn(frontmatter, CLASSIFICATION_FIELD))) return;
       }
 
-      const value = await this.chooseClassification(this.translate("note.classify"), file.basename, this.getClassification(file));
+      const note = this.isNote(file);
+      const value = await this.chooseClassification(this.translate(note ? "note.classify" : "attachment.classify"),
+        note ? file.basename : file.name, this.getClassification(file));
       if (value && !this.stopped) await this.writeClassification(file, value, onlyIfMissing ? "missing" : "always");
     }, "errors.openClassification");
   }
 
-  private selectForFiles(files: readonly TFile[]): Promise<void> {
+  private selectForFiles(files: readonly TFile[], includesAttachments: boolean): Promise<void> {
     return this.queuePrompt(async () => {
-      const notes = files.filter((file) => this.canWrite(file));
-      if (!notes.length) return;
+      const selection = files.filter((file) => this.canWrite(file));
+      if (!selection.length) return;
 
       const value = await this.chooseClassification(
-        this.translate("note.classifySelected"), this.translate("note.selectedCount", { count: notes.length }),
+        this.translate(includesAttachments ? "attachment.classifySelected" : "note.classifySelected"),
+        this.translate(includesAttachments ? "attachment.selectedCount" : "note.selectedCount", { count: selection.length }),
+        undefined, "batch.preview",
       );
-      if (value) await this.writeClassifications(notes, value, "always");
+      if (value) await this.previewAndApply(selection, value, "always");
     }, "errors.openClassification");
   }
 
-  private async chooseClassification(title: string, description: string, currentValue?: string): Promise<string | undefined> {
+  private async chooseClassification(
+    title: string, description: string, currentValue?: string, submit: TranslationKey = "actions.save",
+  ): Promise<string | undefined> {
     const { classifications } = this.settings;
     if (!classifications.length) {
       new Notice(this.translate("errors.noClassifications"));
@@ -219,7 +265,7 @@ export default class Classificator extends Plugin {
     }
 
     const value = await new Promise<string | undefined>((resolve) => {
-      this.modal = new ClassificationModal(this.app, title, description, classifications, currentValue, this.translate, resolve);
+      this.modal = new ClassificationModal(this.app, title, description, classifications, currentValue, submit, this.translate, resolve);
       this.modal.open();
     });
     this.modal = undefined;
@@ -228,25 +274,41 @@ export default class Classificator extends Plugin {
 
   private editFolderSettings(folder: TFolder): Promise<void> {
     return this.queuePrompt(async () => {
-      const currentClassification = await readFolderClassification(this.app, folder);
-      if (this.stopped) return;
-      const selection = await new Promise<FolderSettingsSelection | undefined>((resolve) => {
-        this.modal = new FolderSettingsModal(this.app, folder.path, currentClassification, this.settings, this.translate, resolve);
-        this.modal.open();
-      });
-      this.modal = undefined;
-      if (!selection || this.stopped) return;
-      if (selection.classification !== (currentClassification ?? null)) {
-        await writeFolderClassification(this.app, folder, selection.classification);
+      const { vault } = this.app;
+      const { path } = folder;
+      const isCurrent = () => !this.stopped && vault.getFolderByPath(path) === folder;
+      let draft: FolderSettingsDraft | undefined;
+      while (isCurrent()) {
+        const currentClassification = await readFolderClassification(this.app, folder);
+        const settings = this.settings;
+        const parent = settings.inheritFolderRules && !folder.isRoot() ? folder.parent : null;
+        const fallback = await resolveFolderDefault(this.app, parent, settings);
+        if (!isCurrent()) return;
+        draft ??= { classification: currentClassification ?? "", mode: "unclassified", recursive: false };
+        const dialogDraft = draft;
+        const action = await new Promise<FolderSettingsAction | undefined>((resolve) => {
+          this.modal = new FolderSettingsModal(this.app, path, dialogDraft, fallback, settings, this.translate, resolve);
+          this.modal.open();
+        });
+        this.modal = undefined;
+        if (!action || !isCurrent()) return;
+        if (action.kind === "save") {
+          if (action.classification !== (currentClassification ?? null)) {
+            await writeFolderClassification(this.app, folder, action.classification);
+          }
+          return;
+        }
+        draft = action.draft;
+        const notes: TFile[] = [];
+        if (draft.recursive) {
+          Vault.recurseChildren(folder, (file) => {
+            if (this.isBatchNote(file)) notes.push(file);
+          });
+        } else {
+          notes.push(...folder.children.filter((file) => this.isBatchNote(file)));
+        }
+        await this.previewAndApply(notes, action.value, draft.mode);
       }
-      const { applyTo } = selection;
-      if (!applyTo || this.stopped || this.app.vault.getFolderByPath(folder.path) !== folder) return;
-
-      const notes: TFile[] = [];
-      Vault.recurseChildren(folder, (file) => {
-        if (this.isBatchNote(file)) notes.push(file);
-      });
-      await this.writeClassifications(notes, applyTo.classification, applyTo.scope);
     }, "errors.folderSettings");
   }
 
@@ -260,12 +322,16 @@ export default class Classificator extends Plugin {
     return this.prompts;
   }
 
-  private isNote(file: TAbstractFile | null): file is TFile {
-    return file instanceof TFile && file.extension === "md";
+  private isNote(file: TFile): boolean {
+    return file.extension === "md";
+  }
+
+  private isClassifiable(file: TAbstractFile): file is TFile {
+    return file instanceof TFile && file.name !== FOLDER_META_FILENAME;
   }
 
   private isBatchNote(file: TAbstractFile): file is TFile {
-    return this.isNote(file) && file.name !== FOLDER_META_FILENAME;
+    return this.isClassifiable(file) && this.isNote(file);
   }
 
   private canWrite(file: TFile): boolean {
@@ -282,12 +348,37 @@ export default class Classificator extends Plugin {
     }
   }
 
+  private queueAttachmentWrite<T>(task: () => Promise<T>): Promise<T> {
+    const write = this.attachmentWrites.then(task);
+    this.attachmentWrites = write.then(() => undefined, () => undefined);
+    return write;
+  }
+
+  private onAttachmentPathChange(oldPath: string, file: TFile | null): void {
+    if (oldPath.endsWith(".md")) return;
+    const { vault } = this.app;
+    const separator = oldPath.lastIndexOf("/");
+    const source = separator < 0 ? vault.getRoot() : vault.getFolderByPath(oldPath.slice(0, separator));
+    if (!source) return;
+    const oldName = oldPath.slice(separator + 1);
+    const destination = file ? file.parent ?? vault.getRoot() : null;
+    const name = file?.name ?? oldName;
+    void this.queueAttachmentWrite(async () => {
+      if (!this.stopped) await moveAttachmentClassification(this.app, source, oldName, destination, name);
+    }).catch(() => {
+      if (!this.stopped) new Notice(this.translate("errors.attachmentMetadata", { name: oldName }));
+    });
+  }
+
   private async classifyNewNote(file: TFile): Promise<void> {
     const folder = file.parent ?? this.app.vault.getRoot();
+    const { path } = folder;
+    const settings = this.settings;
     try {
-      const folderClassification = await readFolderClassification(this.app, folder);
-      if (this.stopped || (file.parent ?? this.app.vault.getRoot()) !== folder || this.settings.creationMode !== "automatic") return;
-      const classification = folderClassification ?? this.settings.defaultClassification;
+      const effective = await resolveFolderDefault(this.app, folder, settings);
+      if (this.stopped || (file.parent ?? this.app.vault.getRoot()) !== folder || folder.path !== path
+        || this.settings.creationMode !== "automatic" || this.settings.inheritFolderRules !== settings.inheritFolderRules) return;
+      const classification = effective.folderPath === undefined ? this.settings.defaultClassification : effective.value;
       if (this.settings.classifications.some(({ value }) => value === classification)) {
         await this.writeClassification(file, classification, "missing");
       }
@@ -298,30 +389,86 @@ export default class Classificator extends Plugin {
     }
   }
 
-  private async writeClassifications(notes: readonly TFile[], value: string, mode: WriteMode): Promise<void> {
-    for (const note of notes) {
+  private async previewAndApply(files: readonly TFile[], value: string, mode: BatchMode): Promise<void> {
+    const entries: BatchEntry[] = [];
+    const candidates = files.map((file) => ({ file, path: file.path })).sort((a, b) => a.path.localeCompare(b.path));
+    for (const { file, path } of candidates) {
       if (this.stopped) return;
-      if (this.isBatchNote(note)) await this.writeClassification(note, value, mode);
+      entries.push(await this.previewFile(file, path, value, mode));
+    }
+    if (this.stopped) return;
+    const confirmed = await new Promise<boolean>((resolve) => {
+      this.modal = new BatchPreviewModal(this.app, value, entries, this.translate, resolve);
+      this.modal.open();
+    });
+    this.modal = undefined;
+    if (!confirmed || this.stopped) return;
+
+    const counts = { changed: 0, skipped: 0, failed: 0 };
+    const progress = this.showBatchNotice(this.translate("batch.applying"), "info", 0);
+    try {
+      for (const entry of entries) {
+        if (this.stopped) return;
+        const outcome = "file" in entry ? await this.writeClassification(entry.file, value, mode, entry)
+          : entry.action === "unreadable" ? "failed" : "skipped";
+        counts[outcome]++;
+      }
+    } finally {
+      progress.hide();
+    }
+    if (!this.stopped) this.showBatchNotice(this.translate("batch.result", counts), counts.failed ? "error" : "success");
+  }
+
+  private async previewFile(file: TFile, path: string, value: string, mode: BatchMode): Promise<BatchEntry> {
+    if (file.path !== path || !this.canWrite(file)) return { path, action: "skip" };
+    if (this.isNote(file)) return previewClassification(this.app.vault, file, value, mode);
+    try {
+      const current = await readAttachmentClassification(this.app, file.parent ?? this.app.vault.getRoot(), file.name);
+      return file.path === path ? previewValue(file, current, value, mode) : { path, action: "skip" };
+    } catch {
+      return { path, action: "unreadable" };
     }
   }
 
-  private async writeClassification(file: TFile, value: string, mode: WriteMode): Promise<void> {
-    if (!this.canWrite(file) || (mode === "missing" && !this.isBatchNote(file))) return;
+  private showBatchNotice(text: string, tone: "info" | "success" | "error", duration?: number): Notice {
+    const message = createFragment((fragment) => {
+      fragment.createDiv({ cls: `classificator-batch-notice classificator-message--${tone}`, text });
+    });
+    return new Notice(message, duration);
+  }
+
+  private async writeClassification(
+    file: TFile, value: string, mode: WriteMode, expected?: { path: string; previous: string },
+  ): Promise<WriteResult> {
+    if (this.stopped || !this.isClassifiable(file) || !this.canWrite(file)
+      || (expected && expected.path !== file.path)) return "skipped";
+    const shouldWrite = (current: unknown) => !this.stopped && current !== value
+      && (!expected || (expected.path === file.path && expected.previous === classificationSnapshot(current)))
+      && (mode !== "unclassified" || isMissingClassification(current) || isExplicitlyUnclassified(current));
     try {
+      if (!this.isNote(file)) {
+        const { path, name } = file;
+        const folder = file.parent ?? this.app.vault.getRoot();
+        const changed = await this.queueAttachmentWrite(() => writeAttachmentClassification(this.app, folder, name, value,
+          (current) => file.path === path && this.canWrite(file) && shouldWrite(current)));
+        return changed ? "changed" : "skipped";
+      }
       await this.app.fileManager.processFrontMatter(file, (frontmatter: Record<string, unknown>) => {
         const currentValue = frontmatter[CLASSIFICATION_FIELD];
-        if (currentValue === value
-          || (mode === "missing" && Object.hasOwn(frontmatter, CLASSIFICATION_FIELD))
-          || (mode === "unclassified" && !isUnclassified(currentValue))) {
+        if (!this.isBatchNote(file) || !shouldWrite(currentValue)
+          || (mode === "missing" && Object.hasOwn(frontmatter, CLASSIFICATION_FIELD))) {
           // Returning from the callback would still let Obsidian reserialize the existing frontmatter.
           throw KEEP_CLASSIFICATION;
         }
         frontmatter[CLASSIFICATION_FIELD] = value;
       });
+      return "changed";
     } catch (error) {
-      if (error !== KEEP_CLASSIFICATION && !this.stopped && this.canWrite(file)) {
+      if (error === KEEP_CLASSIFICATION || !this.canWrite(file)) return "skipped";
+      if (!expected && !this.stopped) {
         new Notice(this.translate("errors.classificationWrite", { name: file.basename }));
       }
+      return "failed";
     }
   }
 }

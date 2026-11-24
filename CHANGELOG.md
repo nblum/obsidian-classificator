@@ -2,6 +2,23 @@
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-11-24
+
+### Added
+
+- Preview which notes will get a new classification, be overwritten, or be skipped before applying a batch.
+- Open the classification overview to find notes with missing, unclassified, or unknown values and filter by folder and status.
+- Optionally inherit the nearest parent folder’s classification rule and see its source in the folder dialog.
+- Toggle classification badges and dots from the file explorer toolbar. The vault remembers the display setting.
+- Classify attachments from the file explorer and store their labels in the folder’s `_meta.md` alongside its existing properties.
+- Set or change the classification of an open attachment from its header.
+
+### Changed
+
+- Save folder defaults separately from updates to existing notes. Choose whether a batch includes subfolders.
+- Treat `_meta.md` as unclassified in the file explorer and note header, and reserve its `classification` property for the folder default.
+- Right-align classification badges and dots for Markdown notes and attachments in the file explorer.
+
 ## [0.4.0] - 2026-11-23
 
 ### Changed

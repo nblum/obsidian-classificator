@@ -4,6 +4,7 @@ import { renderAbout } from "./help";
 import { isLanguagePreference, languageNames } from "./i18n";
 import type { LanguagePreference } from "./i18n";
 import type Classificator from "./main";
+import { UNCLASSIFIED } from "./note-classification";
 
 const COLORS = ["gray", "green", "blue", "yellow", "orange", "red", "purple"] as const;
 const saveMessages = {
@@ -32,12 +33,12 @@ export interface ClassificatorSettings {
   classifications: Classification[];
   creationMode: CreationMode;
   defaultClassification: string;
+  inheritFolderRules: boolean;
+  showExplorerClassifications: boolean;
   // Keep the old explorer settings as defaults for classifications without an explicit style.
   showExplorerBadge: boolean;
   explorerBadgeStyle: Exclude<ExplorerBadgeStyle, "hidden">;
 }
-
-export const UNCLASSIFIED = "unclassified";
 
 export const DEFAULT_SETTINGS: ClassificatorSettings = {
   language: "auto",
@@ -50,6 +51,8 @@ export const DEFAULT_SETTINGS: ClassificatorSettings = {
   ],
   creationMode: "automatic",
   defaultClassification: UNCLASSIFIED,
+  inheritFolderRules: false,
+  showExplorerClassifications: true,
   showExplorerBadge: true,
   explorerBadgeStyle: "label",
 };
@@ -181,6 +184,16 @@ export class ClassificatorSettingTab extends PluginSettingTab {
     }
 
     rows.push({
+      name: t("settings.inheritFolderRules"),
+      desc: t("settings.inheritFolderRulesDescription"),
+      render: (setting) => {
+        setting.addToggle((input) => {
+          input.toggleEl.setAttribute("aria-label", t("settings.inheritFolderRules"));
+          input.setValue(settings.inheritFolderRules)
+            .onChange((inheritFolderRules) => this.save({ inheritFolderRules }));
+        });
+      },
+    }, {
       name: t("settings.classifications"),
       render: (setting) => { setting.setHeading(); },
     });

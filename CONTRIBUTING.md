@@ -27,6 +27,7 @@ On Linux, install `xvfb`, `openbox` and `xauth` to run the suite on a private di
 ## Layout
 
 - `src/` contains the TypeScript plugin, with lifecycle and classification writes in `main.ts` and separate modules for badges, settings, and the selection dialog.
+- `src/folder-metadata.ts` edits the YAML in `_meta.md` through `Vault.process` to preserve comments and other properties. Regular note classifications use `FileManager.processFrontMatter`.
 - `manifest.json` and `styles.css` are shipped with the generated `main.js`. Keep `main.js` and local vault settings out of Git.
 - `tests/` contains focused tests and Obsidian scenarios. Keep test data in the fixture vault under `tests/e2e/vault/`.
 - `scripts/` and `.github/workflows/` contain the local tooling and hosted pipelines. Use [AGENTS.md](AGENTS.md) for the project skills.

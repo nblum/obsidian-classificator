@@ -1,6 +1,6 @@
 import { Modal, Setting } from "obsidian";
 import type { App, ButtonComponent } from "obsidian";
-import type { Translator } from "./i18n";
+import type { TranslationKey, Translator } from "./i18n";
 import type { Classification } from "./settings";
 
 export class ClassificationModal extends Modal {
@@ -12,6 +12,7 @@ export class ClassificationModal extends Modal {
     private readonly description: string,
     private readonly options: readonly Classification[],
     currentValue: string | undefined,
+    private readonly submit: TranslationKey,
     private readonly translate: Translator,
     private readonly onFinish: (value?: string) => void,
   ) {
@@ -47,7 +48,7 @@ export class ClassificationModal extends Modal {
       .addButton((button) => {
         saveButton = button;
         button
-          .setButtonText(t("actions.save"))
+          .setButtonText(t(this.submit))
           .setCta()
           .setDisabled(!this.selected)
           .onClick(() => {

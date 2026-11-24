@@ -28,8 +28,59 @@
 }
 
 .classificator-help-actions .setting-item-control,
-.classificator-classification-setting .setting-item-control {
+.classificator-classification-setting .setting-item-control,
+.classificator-folder-actions .setting-item-control {
   flex-wrap: wrap;
+}
+
+.classificator-folder-settings-modal select,
+.classificator-overview select {
+  max-width: min(16rem, 40vw);
+  text-overflow: ellipsis;
+}
+
+.classificator-batch-preview details {
+  margin-block: var(--size-4-2);
+}
+
+.classificator-batch-preview summary {
+  cursor: pointer;
+}
+
+.classificator-note-paths {
+  max-height: 35vh;
+  overflow-y: auto;
+  overflow-wrap: anywhere;
+}
+
+.classificator-overview-results {
+  padding: 0;
+  list-style: none;
+}
+
+.classificator-overview-results li {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--size-4-3);
+  padding-block: var(--size-4-2);
+  border-bottom: 1px solid var(--background-modifier-border);
+}
+
+.classificator-overview-results button {
+  height: auto;
+  padding: 0;
+  background: transparent;
+  box-shadow: none;
+  color: var(--text-accent);
+  text-align: start;
+  white-space: normal;
+}
+
+.classificator-overview-results span {
+  flex: 0 1 45%;
+  color: var(--text-muted);
+  font-size: var(--font-ui-small);
 }
 
 .classificator-classification-setting label {
@@ -49,11 +100,19 @@
   margin-inline-end: auto;
 }
 
-.classificator-message {
+.classificator-message,
+.classificator-batch-notice {
   --classificator-message-accent: var(--color-blue);
+  border-inline-start: 3px solid var(--classificator-message-accent);
+}
+
+.classificator-batch-notice {
+  padding-inline-start: var(--size-4-2);
+}
+
+.classificator-message {
   margin-block: 0 var(--size-4-3);
   padding: var(--size-4-2) var(--size-4-3);
-  border-inline-start: 3px solid var(--classificator-message-accent);
   border-radius: var(--radius-s);
   background-color: var(--background-secondary);
   color: var(--text-normal);
@@ -67,6 +126,11 @@
 
 .classificator-message--success { --classificator-message-accent: var(--color-green); }
 .classificator-message--error { --classificator-message-accent: var(--color-red); }
+
+.nav-action-button.classificator-explorer-toggle[aria-pressed="true"] {
+  color: var(--interactive-accent);
+  background-color: var(--background-modifier-hover);
+}
 
 .classificator-badge {
   --classificator-color: var(--text-muted);
@@ -95,6 +159,10 @@
 .classificator-badge[data-color="red"] { --classificator-color: var(--color-red); }
 .classificator-badge[data-color="purple"] { --classificator-color: var(--color-purple); }
 
+.nav-file-title:has(> .classificator-badge--explorer) > .nav-file-title-content {
+  flex-grow: 1;
+}
+
 .classificator-badge--explorer {
   flex: 0 1 auto;
   align-self: center;
@@ -102,7 +170,6 @@
   max-width: min(42%, 9rem);
   margin-inline-start: 6px;
   text-overflow: ellipsis;
-  cursor: pointer;
 }
 
 .view-action.classificator-badge--header {
@@ -114,13 +181,14 @@
   border-radius: 999px;
   color: var(--text-normal);
   text-overflow: ellipsis;
+}
+
+.classificator-badge[aria-haspopup] {
   cursor: pointer;
 }
 
-.classificator-badge--explorer:hover,
-.classificator-badge--explorer:focus-visible,
-.view-action.classificator-badge--header:hover,
-.view-action.classificator-badge--header:focus-visible {
+.classificator-badge:where([aria-haspopup]):hover,
+.classificator-badge:where([aria-haspopup]):focus-visible {
   background-color: color-mix(in srgb, var(--classificator-color) 26%, var(--background-primary));
 }
 
