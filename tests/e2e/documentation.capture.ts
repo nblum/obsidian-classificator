@@ -78,14 +78,14 @@ describe("Classificator documentation screenshots (opt-in)", () => {
     await Promise.all([...assets.map(({ filename }) => filename), "index.html"].map((filename) =>
       rm(join(output, filename), { force: true })));
     await writeFile(join(obsidianPage.getVaultPath(), ".obsidian", "plugins", pluginId, "data.json"),
-      JSON.stringify({ language: "en" }));
+      JSON.stringify({ language: "en", explorerBadgeStyle: "label" }));
     await copyFile("assets/teaser/teaser.png", join(obsidianPage.getVaultPath(), "Projects", "Cover.png"));
     await setViewport();
     await obsidianPage.enablePlugin(pluginId);
   });
 
   it("captures classification workflows, the file explorer, settings and help", async () => {
-    await expect($(`${intro} h3`)).toHaveText("Classify a note");
+    await expect($(`${intro} h3`)).toHaveText("Welcome to Classificator");
     await capture("introduction.png", intro);
     await browser.keys("Escape");
 

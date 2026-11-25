@@ -3,7 +3,7 @@
   { "filename": "change-classification.png", "description": "The classification menu in the header of an open PDF" },
   { "filename": "file-explorer.png", "description": "Classification badges and dots on notes and attachments in the file explorer" },
   { "filename": "folder-rules.png", "description": "The folder default and preview options for existing notes" },
-  { "filename": "introduction.png", "description": "The first step of the Classificator introduction" },
+  { "filename": "introduction.png", "description": "The welcome page with an example classification badge in the note header" },
   { "filename": "settings.png", "description": "Plugin information, language selection, and save feedback in settings" },
   { "filename": "about.png", "description": "The About dialog with the plugin version, author, and links" }
 ]

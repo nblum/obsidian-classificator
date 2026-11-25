@@ -54,7 +54,7 @@ export const DEFAULT_SETTINGS: ClassificatorSettings = {
   inheritFolderRules: false,
   showExplorerClassifications: true,
   showExplorerBadge: true,
-  explorerBadgeStyle: "label",
+  explorerBadgeStyle: "dot",
 };
 
 export function getExplorerBadgeStyle(

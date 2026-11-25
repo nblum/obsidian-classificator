@@ -1,4 +1,4 @@
-import { readFile, writeFile } from "node:fs/promises";
+import { readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { $, browser, expect } from "@wdio/globals";
 import { obsidianPage } from "wdio-obsidian-service";
@@ -64,7 +64,9 @@ async function openFolderSettings(path: string): Promise<void> {
 
 async function loadSettings(settings: Partial<ClassificatorSettings> & { showNoteBadge?: boolean }): Promise<void> {
   await obsidianPage.disablePlugin(pluginId);
-  await writeFile(settingsPath(), JSON.stringify({ language: "de", introductionSeen: true, ...settings }));
+  await writeFile(settingsPath(), JSON.stringify({
+    language: "de", introductionSeen: true, explorerBadgeStyle: "label", ...settings,
+  }));
   await obsidianPage.enablePlugin(pluginId);
 }
 
@@ -77,6 +79,55 @@ async function saveClassification(value: string): Promise<void> {
   await $(`${modal} select:not([aria-hidden="true"])`).selectByAttribute("value", value);
   await $(`${modal} button.mod-cta`).click();
 }
+
+describe("Classificator startup", () => {
+  it("shows a dot for an unopened classified note on first enable and after restart", async () => {
+    await browser.reloadObsidian({ vault: "tests/e2e/vault", plugins: [] });
+    await rm(settingsPath(), { force: true });
+    await obsidianPage.enablePlugin(pluginId);
+
+    const dot = `${explorerBadge(existing)}.classificator-badge--dot[data-color="green"]`;
+    await expect($(dot)).toBeDisplayed();
+
+    const enabledPlugins = join(obsidianPage.getVaultPath(), ".obsidian", "community-plugins.json");
+    await browser.waitUntil(async () => (await readFile(enabledPlugins, "utf8")).includes(JSON.stringify(pluginId)));
+    // Restart without reinstalling the plugin, which could copy local settings into the test vault.
+    await browser.reloadSession();
+    await expect($(dot)).toBeDisplayed();
+    const activePath = await browser.executeObsidian(({ app }) => app.workspace.getActiveFile()?.path);
+    expect(activePath).not.toBe(existing);
+  });
+
+  it("refreshes the explorer when the startup cache resolves without a file change", async () => {
+    await browser.reloadObsidian({ vault: "tests/e2e/vault", plugins: [] });
+    await browser.executeObsidian(({ app }, path) => {
+      const cache = app.metadataCache;
+      const getFileCache = cache.getFileCache.bind(cache);
+      cache.getFileCache = (file) => file.path === path ? null : getFileCache(file);
+    }, existing);
+
+    try {
+      await loadSettings({ explorerBadgeStyle: "dot" });
+      await expect($(explorerToggle)).toBeDisplayed();
+      await expect($(explorerBadge(existing))).not.toExist();
+
+      await browser.executeObsidian(async ({ app }) => {
+        // Let the initial render and its DOM mutations settle before making the cache available.
+        await new Promise<void>((resolve) => {
+          requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+        });
+        Reflect.deleteProperty(app.metadataCache, "getFileCache");
+        app.metadataCache.trigger("resolved");
+      });
+
+      await expect($(`${explorerBadge(existing)}.classificator-badge--dot`)).toBeDisplayed();
+    } finally {
+      await browser.executeObsidian(({ app }) => {
+        Reflect.deleteProperty(app.metadataCache, "getFileCache");
+      });
+    }
+  });
+});
 
 describe("Classificator in Obsidian", () => {
   beforeEach(async () => {
@@ -813,15 +864,27 @@ describe("Classificator in Obsidian", () => {
     const intro = $(".classificator-introduction-modal");
     const about = $(".classificator-about-modal");
     const next = () => intro.$("button.mod-cta");
+    await expect(intro.$("h3")).toHaveText("Willkommen bei Classificator");
+    await expect(intro.$(".classificator-intro-progress")).toHaveText("Schritt 1 von 4");
+    await expect(intro.$(".classificator-intro-badge")).toHaveText("internal");
+    await expect(intro.$(".classificator-intro-note-menu")).not.toExist();
+    await expect(intro.$("button=Zurück")).not.toExist();
+    await next().click();
     await expect(intro.$("h3")).toHaveText("Eine Notiz einstufen");
-    await expect(intro.$(".classificator-intro-progress")).toHaveText("Schritt 1 von 3");
+    const picker = intro.$(".classificator-intro-note-menu");
+    await expect(picker).toBeDisplayed();
+    await expect(picker.$(".classificator-intro-menu-current")).toHaveText("internal");
+    await intro.$("button=Zurück").click();
+    await expect(intro.$("h3")).toHaveText("Willkommen bei Classificator");
+    await expect(picker).not.toExist();
+    await next().click();
     await next().click();
     await expect(intro.$("h3")).toHaveText("Standard für neue Notizen festlegen");
-    await intro.$("button=Zurück").click();
-    await expect(intro.$("h3")).toHaveText("Eine Notiz einstufen");
-    await next().click();
+    await expect(intro.$$(".classificator-intro-setting")).toBeElementsArrayOfSize(2);
     await next().click();
     await expect(intro.$("h3")).toHaveText("Ordnerregeln festlegen");
+    await expect(intro.$(".classificator-intro-panel-title")).toHaveText("Projekte");
+    await expect(intro.$(".classificator-intro-select")).toHaveText("confidential");
     await expect(next()).toHaveText("Fertig");
     await next().click();
     await expect(intro).not.toExist();
@@ -841,7 +904,7 @@ describe("Classificator in Obsidian", () => {
       await expect(header.$(".classificator-about-meta")).toHaveText(expect.stringContaining(manifest.author));
       await expect(header.$('a[href="https://github.com/nblum/obsidian-classificator#readme"]')).toHaveText("Dokumentation");
       await $("button=Einführung anzeigen").click();
-      await expect(intro.$("h3")).toHaveText("Eine Notiz einstufen");
+      await expect(intro.$("h3")).toHaveText("Willkommen bei Classificator");
       await browser.keys("Escape");
       await $("button=Über Classificator").click();
       await expect(about.$('a[href="https://github.com/nblum/obsidian-classificator/issues/new"]')).toHaveText("Feedback geben");
@@ -851,7 +914,7 @@ describe("Classificator in Obsidian", () => {
     }
 
     await browser.executeObsidianCommand(`${pluginId}:show-introduction`);
-    await expect(intro).toBeDisplayed();
+    await expect(intro.$("h3")).toHaveText("Willkommen bei Classificator");
     await browser.keys("Escape");
     await browser.executeObsidianCommand(`${pluginId}:show-about`);
     await expect(about.$(".modal-title")).toHaveText("Über Classificator");

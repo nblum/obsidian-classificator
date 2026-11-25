@@ -12,7 +12,7 @@ Classificator requires Obsidian Desktop 1.7.4 or later. Copy `manifest.json`, `m
 
 ## Introduction and plugin information
 
-On first launch, Classificator walks you through classifying notes, choosing defaults, and setting folder rules. **Show introduction** and **About Classificator** are available in settings and in the command palette.
+On first launch, the illustrated introduction shows where to find the classification badge, how to choose a classification, and where to set defaults for new notes and folders. **Show introduction** and **About Classificator** are available in settings and in the command palette.
 
 The top of the settings tab shows the plugin version, author, and links to documentation, the repository, and feedback. Classificator shows the save status when you change a setting. [Settings](assets/screenshots/settings.png) · [Introduction](assets/screenshots/introduction.png) · [About Classificator](assets/screenshots/about.png)
 
@@ -53,7 +53,7 @@ You can also [change the values offered in the picker](#appearance-and-classific
 
 ## File explorer
 
-In Obsidian’s left sidebar, open **Files** using the folder icon. Classificator displays text badges and color dots at the right edge of the file rows. Attachment rows also show the file extension.
+In Obsidian’s left sidebar, open **Files** using the folder icon. By default, Classificator shows color dots at the right edge of classified file rows, even for files you haven’t opened. You can choose a text badge or hide a classification in settings. Attachment rows also show the file extension.
 
 ![The Files sidebar with the tag button, a note with a color dot, and PDF and PNG attachments with classifications](assets/screenshots/file-explorer.png)
 

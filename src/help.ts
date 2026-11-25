@@ -1,6 +1,7 @@
 import { Modal } from "obsidian";
 import type { App, PluginManifest } from "obsidian";
 import type { TranslationKey, Translator } from "./i18n";
+import { introductionIllustrations } from "./introduction-illustrations";
 
 const repository = "https://github.com/nblum/obsidian-classificator";
 const aboutLinks = [
@@ -53,10 +54,11 @@ export class AboutModal extends Modal {
 }
 
 const introductionSteps = [
-  ["intro.noteTitle", "intro.noteDescription"],
-  ["intro.defaultsTitle", "intro.defaultsDescription"],
-  ["intro.foldersTitle", "intro.foldersDescription"],
-] as const satisfies readonly (readonly [TranslationKey, TranslationKey])[];
+  ["intro.welcomeTitle", "intro.welcomeDescription", "welcome"],
+  ["intro.noteTitle", "intro.noteDescription", "picker"],
+  ["intro.defaultsTitle", "intro.defaultsDescription", "defaults"],
+  ["intro.foldersTitle", "intro.foldersDescription", "folders"],
+] as const satisfies readonly (readonly [TranslationKey, TranslationKey, keyof typeof introductionIllustrations])[];
 
 export class IntroductionModal extends Modal {
   private step = 0;
@@ -82,9 +84,14 @@ export class IntroductionModal extends Modal {
     if (!step) return;
 
     contentEl.empty();
-    const [title, description] = step;
+    const [title, description, illustration] = step;
     const heading = contentEl.createEl("h3", { text: t(title), attr: { tabindex: "-1" } });
     contentEl.createEl("p", { text: t(description) });
+    const stage = contentEl.createDiv({
+      cls: "classificator-intro-illustration",
+      attr: { "aria-hidden": "true" },
+    });
+    introductionIllustrations[illustration](stage, t);
 
     const actions = contentEl.createDiv({ cls: "classificator-dialog-actions" });
     actions.createSpan({

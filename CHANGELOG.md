@@ -2,6 +2,18 @@
 
 ## [Unreleased]
 
+### Added
+
+- Add a welcome page and illustrate each step of the introduction.
+
+### Changed
+
+- Use color dots as the default file explorer style.
+
+### Fixed
+
+- Refresh file explorer badges when Obsidian finishes resolving metadata so that existing classifications appear without opening a file.
+
 ## [0.5.1] - 2026-11-24
 
 ### Changed

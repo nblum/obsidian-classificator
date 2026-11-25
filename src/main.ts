@@ -97,6 +97,8 @@ export default class Classificator extends Plugin {
     this.registerEvent(workspace.on("file-open", refresh));
     this.registerEvent(workspace.on("active-leaf-change", refresh));
     this.registerEvent(metadataCache.on("changed", refresh));
+    // Startup can reuse cached metadata without firing a per-file change event.
+    this.registerEvent(metadataCache.on("resolved", refresh));
     this.registerEvent(vault.on("rename", (file, oldPath) => {
       if (file instanceof TFile) this.onAttachmentPathChange(oldPath, this.isNote(file) ? null : file);
       refresh();
