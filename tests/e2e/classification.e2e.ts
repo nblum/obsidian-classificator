@@ -18,6 +18,7 @@ const folderNoteMode = `${folderModal} select[aria-label="Zu ändernde Notizen"]
 const preview = ".classificator-batch-preview";
 const overview = ".classificator-overview";
 const explorerToggle = ".nav-header .nav-buttons-container > button.classificator-explorer-toggle";
+const explorerBadgedRowClass = "classificator-explorer-row-with-badge";
 const headerBadge = ".workspace-leaf.mod-active .classificator-badge--header";
 
 function explorerStyle(value: string) {
@@ -494,6 +495,7 @@ describe("Classificator in Obsidian", () => {
     }
 
     await expect($(explorerBadge(confidential))).not.toExist();
+    await expect($(explorerRow(confidential))).not.toHaveElementClass(explorerBadgedRowClass);
     await expect($(headerBadge)).toHaveText("confidential");
     expect(await obsidianPage.read(confidential)).toBe(contents);
     await expect($(`${explorerBadge(existing)}.classificator-badge--dot`)).toBeDisplayed();
@@ -548,6 +550,8 @@ describe("Classificator in Obsidian", () => {
     await expect(toggle).toHaveAttribute("aria-pressed", "false");
     await expect($(explorerBadge(existing))).not.toExist();
     await expect($(explorerBadge(internal))).not.toExist();
+    await expect($(explorerRow(existing))).not.toHaveElementClass(explorerBadgedRowClass);
+    await expect($(explorerRow(internal))).not.toHaveElementClass(explorerBadgedRowClass);
     await expect(header).toHaveText("public");
     await browser.waitUntil(async () => {
       const data: unknown = JSON.parse(await readFile(settingsPath(), "utf8"));
@@ -594,6 +598,12 @@ describe("Classificator in Obsidian", () => {
     }), badges);
 
     for (const offset of rightOffsets) expect(offset).toBeLessThan(1);
+
+    await obsidianPage.disablePlugin(pluginId);
+    for (const path of [existing, note, attachment]) {
+      await expect($(explorerBadge(path))).not.toExist();
+      await expect($(explorerRow(path))).not.toHaveElementClass(explorerBadgedRowClass);
+    }
   });
 
   it("opens the header menu by keyboard and removes it on unload", async () => {

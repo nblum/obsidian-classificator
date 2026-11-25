@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Changed
+
+- Use a simpler CSS selector for right-aligned classification badges and dots in the file explorer.
+
 ## [0.6.0] - 2026-11-25
 
 ### Added

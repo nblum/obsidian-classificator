@@ -10,6 +10,7 @@ const EXPLORER_TOOLBAR = ".nav-header .nav-buttons-container";
 const BADGE = "classificator-badge";
 const DOT = "classificator-badge--dot";
 const EXPLORER_BADGE = `${BADGE}--explorer`;
+const EXPLORER_BADGED_ROW = "classificator-explorer-row-with-badge";
 const EXPLORER_TOGGLE = "classificator-explorer-toggle";
 
 export class ClassificationBadges {
@@ -78,14 +79,20 @@ export class ClassificationBadges {
   private removeExplorer(root: HTMLElement): void {
     this.explorers.get(root)?.disconnect();
     this.explorers.delete(root);
-    root.querySelectorAll(`.${EXPLORER_BADGE}, .${EXPLORER_TOGGLE}`).forEach((element) => element.remove());
+    this.clearExplorerBadges(root);
+    root.querySelectorAll(`.${EXPLORER_TOGGLE}`).forEach((toggle) => toggle.remove());
+  }
+
+  private clearExplorerBadges(root: HTMLElement): void {
+    root.querySelectorAll(`.${EXPLORER_BADGE}`).forEach((badge) => badge.remove());
+    root.querySelectorAll(`.${EXPLORER_BADGED_ROW}`).forEach((row) => row.removeClass(EXPLORER_BADGED_ROW));
   }
 
   private renderExplorer(root: HTMLElement): void {
     const { settings } = this.plugin;
     this.renderExplorerToggle(root, settings.showExplorerClassifications);
     if (!settings.showExplorerClassifications) {
-      root.querySelectorAll(`.${EXPLORER_BADGE}`).forEach((badge) => badge.remove());
+      this.clearExplorerBadges(root);
       return;
     }
 
@@ -101,7 +108,9 @@ export class ClassificationBadges {
         existing.remove();
         existing = null;
       }
-      if (!value || style === "hidden") {
+      const showBadge = !!value && style !== "hidden";
+      row.classList.toggle(EXPLORER_BADGED_ROW, showBadge);
+      if (!showBadge) {
         existing?.remove();
         continue;
       }

@@ -292,7 +292,7 @@
 .classificator-badge[data-color="red"] { --classificator-color: var(--color-red); }
 .classificator-badge[data-color="purple"] { --classificator-color: var(--color-purple); }
 
-.nav-file-title:has(> .classificator-badge--explorer) > .nav-file-title-content {
+.nav-file-title.classificator-explorer-row-with-badge > .nav-file-title-content {
   flex-grow: 1;
 }
 
