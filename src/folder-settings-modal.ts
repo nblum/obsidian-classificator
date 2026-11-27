@@ -9,11 +9,12 @@ export interface FolderSettingsDraft {
   classification: string;
   mode: BatchMode;
   recursive: boolean;
+  skipExistingNotes: boolean;
 }
 
 export type FolderSettingsAction =
   | { kind: "save"; draft: FolderSettingsDraft }
-  | { kind: "preview"; value: string; draft: FolderSettingsDraft };
+  | { kind: "preview"; value: string; defaultLabel: string; draft: FolderSettingsDraft };
 
 export class FolderSettingsModal extends Modal {
   constructor(
@@ -36,7 +37,9 @@ export class FolderSettingsModal extends Modal {
     let previewButton: ButtonComponent | undefined;
     const canSave = () => draft.classification !== this.savedClassification;
     const target = () => draft.classification || fallback.value;
-    const canPreview = () => settings.classifications.some(({ value }) => value === target());
+    const canPreview = () => draft.skipExistingNotes
+      ? canSave()
+      : settings.classifications.some(({ value }) => value === target());
     this.modalEl.addClass("classificator-folder-settings-modal");
     this.setTitle(t("folder.title"));
     this.contentEl.createEl("p", { text: this.path });
@@ -73,26 +76,42 @@ export class FolderSettingsModal extends Modal {
 
     new Setting(this.contentEl).setHeading().setName(t("folder.existingNotes"))
       .setDesc(t("folder.existingNotesHelp"));
-    new Setting(this.contentEl).setName(t("folder.scope")).addDropdown((dropdown) => {
+    const checkboxId = "classificator-skip-existing-notes";
+    const skipExisting = new Setting(this.contentEl).setName(createFragment((fragment) => {
+      fragment.createEl("label", { text: t("folder.skipExistingNotes"), attr: { for: checkboxId } });
+    }));
+    const scope = new Setting(this.contentEl).setName(t("folder.scope")).addDropdown((dropdown) => {
       dropdown.selectEl.setAttribute("aria-label", t("folder.scope"));
       dropdown.addOption("direct", t("folder.direct"))
         .addOption("recursive", t("folder.recursive"))
         .setValue(draft.recursive ? "recursive" : "direct")
         .onChange((value) => { draft.recursive = value === "recursive"; });
     });
-    new Setting(this.contentEl).setName(t("folder.notes")).addDropdown((dropdown) => {
+    const notes = new Setting(this.contentEl).setName(t("folder.notes")).addDropdown((dropdown) => {
       dropdown.selectEl.setAttribute("aria-label", t("folder.notes"));
       dropdown.addOption("unclassified", t("folder.unclassifiedNotes"))
         .addOption("always", t("folder.allNotes"))
         .setValue(draft.mode)
         .onChange((value) => { draft.mode = value === "always" ? "always" : "unclassified"; });
     });
+    const checkbox = skipExisting.controlEl.createEl("input", {
+      type: "checkbox", attr: { id: checkboxId },
+    });
+    checkbox.checked = draft.skipExistingNotes;
+    scope.setDisabled(draft.skipExistingNotes);
+    notes.setDisabled(draft.skipExistingNotes);
+    checkbox.addEventListener("change", () => {
+      draft.skipExistingNotes = checkbox.checked;
+      scope.setDisabled(draft.skipExistingNotes);
+      notes.setDisabled(draft.skipExistingNotes);
+      previewButton?.setDisabled(!canPreview());
+    });
     new Setting(this.contentEl).setClass("classificator-folder-actions")
       .addButton((button) => button.setButtonText(t("actions.close")).onClick(() => this.close()))
       .addButton((button) => {
         previewButton = button;
-        button.setButtonText(t("batch.preview")).setCta().setDisabled(!canPreview()).onClick(() => {
-          this.onFinish({ kind: "preview", value: target(), draft });
+        button.setButtonText(t("folder.saveAndApply")).setCta().setDisabled(!canPreview()).onClick(() => {
+          this.onFinish({ kind: "preview", value: target(), defaultLabel: draft.classification || fallbackLabel, draft });
           this.close();
         });
       });

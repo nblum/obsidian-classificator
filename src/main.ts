@@ -3,6 +3,7 @@ import type { Command, Modal, TAbstractFile } from "obsidian";
 import { cachedAttachmentClassification, moveAttachmentClassification, readAttachmentClassification, writeAttachmentClassification } from "./attachment-classification";
 import { ClassificationBadges } from "./badges";
 import { BatchPreviewModal } from "./batch-preview";
+import type { FolderBatchPreview } from "./batch-preview";
 import { FOLDER_META_FILENAME } from "./folder-metadata";
 import { readFolderClassification, resolveFolderDefault, writeFolderClassification } from "./folder-settings";
 import { FolderSettingsModal } from "./folder-settings-modal";
@@ -253,7 +254,9 @@ export default class Classificator extends Plugin {
         this.translate(includesAttachments ? "attachment.selectedCount" : "note.selectedCount", { count: selection.length }),
         undefined, "batch.preview",
       );
-      if (value) await this.previewAndApply(selection, value, "always");
+      if (!value) return;
+      const entries = await this.confirmBatch(selection, value, "always");
+      if (entries) await this.applyBatch(entries, value, "always");
     }, "errors.openClassification");
   }
 
@@ -286,7 +289,7 @@ export default class Classificator extends Plugin {
         const parent = settings.inheritFolderRules && !folder.isRoot() ? folder.parent : null;
         const fallback = await resolveFolderDefault(this.app, parent, settings);
         if (!isCurrent()) return;
-        draft ??= { classification: currentClassification ?? "", mode: "unclassified", recursive: false };
+        draft ??= { classification: currentClassification ?? "", mode: "unclassified", recursive: false, skipExistingNotes: false };
         const dialogDraft = draft;
         const action = await new Promise<FolderSettingsAction | undefined>((resolve) => {
           this.modal = new FolderSettingsModal(
@@ -297,23 +300,34 @@ export default class Classificator extends Plugin {
         this.modal = undefined;
         if (!action || !isCurrent()) return;
         draft = action.draft;
-        if (action.kind === "save") {
-          const classification = draft.classification || null;
-          if (classification !== (currentClassification ?? null)) {
-            await writeFolderClassification(this.app, folder, classification);
-            if (isCurrent()) new Notice(this.translate("folder.defaultSaved"));
+        const classification = draft.classification || null;
+        const defaultChanged = classification !== (currentClassification ?? null);
+        let entries: BatchEntry[] | undefined;
+        if (action.kind === "preview") {
+          const notes: TFile[] = [];
+          if (!draft.skipExistingNotes) {
+            if (draft.recursive) {
+              Vault.recurseChildren(folder, (file) => {
+                if (this.isBatchNote(file)) notes.push(file);
+              });
+            } else {
+              notes.push(...folder.children.filter((file) => this.isBatchNote(file)));
+            }
           }
-          continue;
-        }
-        const notes: TFile[] = [];
-        if (draft.recursive) {
-          Vault.recurseChildren(folder, (file) => {
-            if (this.isBatchNote(file)) notes.push(file);
+          entries = await this.confirmBatch(notes, action.value, draft.mode, {
+            defaultLabel: action.defaultLabel, defaultChanged, skipExistingNotes: draft.skipExistingNotes,
           });
-        } else {
-          notes.push(...folder.children.filter((file) => this.isBatchNote(file)));
+          if (!entries || !isCurrent()) continue;
         }
-        await this.previewAndApply(notes, action.value, draft.mode);
+        if (defaultChanged) {
+          await writeFolderClassification(this.app, folder, classification);
+          if (isCurrent()) new Notice(this.translate("folder.defaultSaved"));
+        }
+        if (action.kind === "save") continue;
+        if (entries?.length && isCurrent()) {
+          await this.applyBatch(entries, action.value, draft.mode);
+        }
+        return;
       }
     }, "errors.folderSettings");
   }
@@ -395,7 +409,9 @@ export default class Classificator extends Plugin {
     }
   }
 
-  private async previewAndApply(files: readonly TFile[], value: string, mode: BatchMode): Promise<void> {
+  private async confirmBatch(
+    files: readonly TFile[], value: string, mode: BatchMode, folder?: FolderBatchPreview,
+  ): Promise<BatchEntry[] | undefined> {
     const entries: BatchEntry[] = [];
     const candidates = files.map((file) => ({ file, path: file.path })).sort((a, b) => a.path.localeCompare(b.path));
     for (const { file, path } of candidates) {
@@ -404,12 +420,14 @@ export default class Classificator extends Plugin {
     }
     if (this.stopped) return;
     const confirmed = await new Promise<boolean>((resolve) => {
-      this.modal = new BatchPreviewModal(this.app, value, entries, this.translate, resolve);
+      this.modal = new BatchPreviewModal(this.app, value, entries, this.translate, resolve, folder);
       this.modal.open();
     });
     this.modal = undefined;
-    if (!confirmed || this.stopped) return;
+    return confirmed && !this.stopped ? entries : undefined;
+  }
 
+  private async applyBatch(entries: readonly BatchEntry[], value: string, mode: BatchMode): Promise<void> {
     const counts = { changed: 0, skipped: 0, failed: 0 };
     const progress = this.showBatchNotice(this.translate("batch.applying"), "info", 0);
     try {

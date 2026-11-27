@@ -100,7 +100,7 @@ In **Apply default value** mode, a folder’s `classification` takes precedence 
 
 Select **Save default** beside the classification picker to save the default for future notes. To remove the folder’s own rule, choose **Global** or **Inherited from** before saving. The dialog stays open so you can also update existing notes.
 
-Under **Existing notes**, choose the scope and which notes to update, then select **Preview changes**. By default it considers notes directly in the folder with a missing, empty, or `unclassified` value. You can include subfolders or switch to all notes. For a recursive batch, the selected value applies throughout the scope, including subfolders with their own rule. Select **Apply changes** in the preview to update the notes.
+Under **Existing notes**, choose the scope and which notes to update, then select **Safe & apply changes** to open the preview. By default it considers notes directly in the folder with a missing, empty, or `unclassified` value. You can include subfolders or switch to all notes. For a recursive batch, the selected value applies throughout the scope, including subfolders with their own rule. Confirm the preview to save the folder default in `_meta.md`, update the notes, and close the dialog. Check **Leave existing files unchanged (save folder default only)** to save only the folder rule through the preview.
 
 ![Folder rules dialog with a default classification, scope and preview for existing notes](assets/screenshots/folder-rules.png)
 

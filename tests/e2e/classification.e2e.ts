@@ -691,14 +691,14 @@ describe("Classificator in Obsidian", () => {
     expect(await obsidianPage.read("Projects/_meta.md")).toMatch(/^classification: internal$/m);
     expect(await obsidianPage.read(note)).toBe(contents);
 
-    await $(folderModal).$("button=Änderungen prüfen").click();
+    await $(folderModal).$("button=Speichern & Änderungen anwenden").click();
     await expect($(preview).$("summary=Neu setzen (1)")).toBeDisplayed();
     expect(await obsidianPage.read(note)).toBe(contents);
-    await $(preview).$("button=Änderungen anwenden").click();
+    await $(preview).$("button=Speichern & Änderungen anwenden").click();
     await browser.waitUntil(async () => /^classification: internal$/m.test(await obsidianPage.read(note)));
   });
 
-  it("previews folder batches by scope, applies them separately, and skips changes made after review", async () => {
+  it("saves the folder default with the previewed batch and skips changes made after review", async () => {
     await createFolder("Projects");
     await createFolder("Projects/Archive");
     const classified = "Projects/Classified.md";
@@ -706,6 +706,7 @@ describe("Classificator in Obsidian", () => {
     const blank = "Projects/Blank.md";
     const missing = "Projects/Archive/Missing.md";
     const unclassified = "Projects/Archive/Unclassified.md";
+    const folderRules = "Projects/_meta.md";
     const nestedRules = "Projects/Archive/_meta.md";
     const ruleContents = "---\nclassification: public\n---\n";
     const attachment = "Projects/Attachment.txt";
@@ -721,30 +722,36 @@ describe("Classificator in Obsidian", () => {
     await expect($(folderScope)).toHaveValue("direct");
     await expect($(folderNoteMode)).toHaveValue("unclassified");
     await $(folderClassification).selectByAttribute("value", "internal");
-    await $(folderModal).$("button=Änderungen prüfen").click();
+    await $(folderModal).$("button=Speichern & Änderungen anwenden").click();
     await expect($(preview).$("summary=Neu setzen (1)")).toBeDisplayed();
     await expect($(preview).$("summary=Überspringen (1)")).toBeDisplayed();
     await $(preview).$("button=Abbrechen").click();
     expect(await obsidianPage.read(blank)).toContain("classification:\n");
     expect(await obsidianPage.read(missing)).toBe("Missing classification.\n");
+    expect(await browser.executeObsidian(({ app }, path) => app.vault.getFileByPath(path) === null, folderRules)).toBe(true);
 
     await expect($(folderClassification)).toHaveValue("internal");
     await $(folderScope).selectByAttribute("value", "recursive");
-    await $(folderModal).$("button=Änderungen prüfen").click();
+    await $(folderModal).$("button=Speichern & Änderungen anwenden").click();
+    await expect($(preview).$("p=Neuer Ordnerstandard ist internal.")).toBeDisplayed();
     await expect($(preview).$("summary=Neu setzen (2)")).toBeDisplayed();
     await expect($(preview).$("summary=Vorhandenen Wert überschreiben (1)")).toBeDisplayed();
-    await $(preview).$("button=Änderungen anwenden").click();
+    await $(preview).$("button=Speichern & Änderungen anwenden").click();
 
     for (const path of [blank, missing, unclassified]) {
       await browser.waitUntil(async () => /^classification: internal$/m.test(await obsidianPage.read(path)));
     }
     expect(await obsidianPage.read(classified)).toBe(classifiedContents);
-    expect(await browser.executeObsidian(({ app }) => app.vault.getFileByPath("Projects/_meta.md") === null)).toBe(true);
+    expect(await obsidianPage.read(folderRules)).toMatch(/^classification: internal$/m);
+    await expect($(".classificator-batch-notice=Einstufung abgeschlossen. Geändert: 3. Übersprungen: 1. Fehlgeschlagen: 0.")).toBeDisplayed();
+    await expect($(folderModal)).not.toBeDisplayed();
+    await expect($(preview)).not.toBeDisplayed();
 
-    await expect($(folderModal)).toBeDisplayed();
+    await openFolderSettings("Projects");
     await $(folderClassification).selectByAttribute("value", "confidential");
+    await $(folderScope).selectByAttribute("value", "recursive");
     await $(folderNoteMode).selectByAttribute("value", "always");
-    await $(folderModal).$("button=Änderungen prüfen").click();
+    await $(folderModal).$("button=Speichern & Änderungen anwenden").click();
     await expect($(preview).$("summary=Vorhandenen Wert überschreiben (4)")).toBeDisplayed();
     await browser.executeObsidian(async ({ app }, path, toMove) => {
       const file = app.vault.getFileByPath(path);
@@ -755,7 +762,7 @@ describe("Classificator in Obsidian", () => {
       });
       await app.fileManager.renameFile(moving, "Moved.md");
     }, classified, missing);
-    await $(preview).$("button=Änderungen anwenden").click();
+    await $(preview).$("button=Speichern & Änderungen anwenden").click();
 
     for (const path of [blank, unclassified]) {
       await browser.waitUntil(async () => /^classification: confidential$/m.test(await obsidianPage.read(path)));
@@ -766,8 +773,35 @@ describe("Classificator in Obsidian", () => {
     expect(await obsidianPage.read(nestedRules)).toBe(ruleContents);
     expect(await obsidianPage.read(attachment)).toBe("Attachment contents.");
     expect(await obsidianPage.read(existing)).toBe(outsideContents);
-    await $(folderModal).$("button=Standard speichern").click();
-    await browser.waitUntil(async () => /^classification: confidential$/m.test(await obsidianPage.read("Projects/_meta.md")));
+    expect(await obsidianPage.read(folderRules)).toMatch(/^classification: confidential$/m);
+  });
+
+  it("only writes _meta.md when the folder preview excludes existing files", async () => {
+    const note = "Projects/Brief.md";
+    const metadata = "Projects/_meta.md";
+    const contents = "Existing brief.\n";
+    await createFolder("Projects");
+    await createFile(note, contents);
+    await createFile(metadata, "---\nclassification: internal\ntopic: handbook # Folder topic\n---\n\nFolder notes.\n");
+
+    await openFolderSettings("Projects");
+    await $(folderClassification).selectByAttribute("value", "confidential");
+    await $(folderNoteMode).selectByAttribute("value", "always");
+    await $(`${folderModal} input[type="checkbox"]`).click();
+    await expect($(folderScope)).toBeDisabled();
+    await expect($(folderNoteMode)).toBeDisabled();
+    await $(folderModal).$("button=Speichern & Änderungen anwenden").click();
+    await expect($(preview).$("p=Neuer Ordnerstandard ist confidential.")).toBeDisplayed();
+    await expect($(preview).$("details")).not.toExist();
+    await $(preview).$("button=Speichern & Änderungen anwenden").click();
+
+    await browser.waitUntil(async () => /^classification: confidential$/m.test(await obsidianPage.read(metadata)));
+    expect(await obsidianPage.read(metadata)).toBe("---\nclassification: confidential\ntopic: handbook # Folder topic\n---\n\nFolder notes.\n");
+    expect(await obsidianPage.read(note)).toBe(contents);
+    await createFile("Projects/New brief.md");
+    await browser.waitUntil(async () => /^classification: confidential$/m.test(await obsidianPage.read("Projects/New brief.md")));
+    await expect($(folderModal)).not.toBeDisplayed();
+    await expect($(preview)).not.toBeDisplayed();
   });
 
   it("removes the classification when reset to global and preserves the rest of _meta.md", async () => {

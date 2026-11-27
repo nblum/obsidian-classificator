@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Changed
+
+- Use **Safe & apply changes** to review and save the folder default in `_meta.md` along with changes to existing notes. The folder dialog closes after confirmation. Check **Leave existing files unchanged** to save only the folder rule.
+
 ## [0.6.1] - 2026-11-25
 
 ### Changed
